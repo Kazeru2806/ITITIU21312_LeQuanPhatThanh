@@ -1,16 +1,20 @@
-import { useState } from 'react';
+import { useState } from "react";
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useGameStore } from '../store/gameStore';
+import { PhoThePhoenix } from "../components/PhoThePhoenix";
+import { LotusPattern, DragonPattern, LanternPattern, BambooPattern } from "../components/VietnamesePatterns";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Card } from "../components/ui/card";
 
 export function JoinPage() {
   const navigate = useNavigate();
   const setPlayerInfo = useGameStore((state) => state.setPlayerInfo);
   const setRoomCode = useGameStore((state) => state.setRoomCode);
   
-  const [mode, setMode] = useState<'join' | 'create'>('join');
-  const [roomCode, setRoomCodeInput] = useState('');
-  const [nickname, setNickname] = useState('');
+  const [roomCode, setRoomCodeInput] = useState("");
+  const [nickname, setNickname] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,124 +91,235 @@ export function JoinPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-red-500 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
-        {/* Logo/Title */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            🎮 VN Party
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Decorative Background Patterns */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <LotusPattern className="absolute top-10 left-10 w-24 h-24 animate-pulse" />
+        <LotusPattern className="absolute bottom-20 right-20 w-32 h-32 animate-pulse" style={{ animationDelay: "1s" }} />
+        <DragonPattern className="absolute top-1/4 right-10 w-48 h-32 opacity-60" />
+        <DragonPattern className="absolute bottom-1/3 left-10 w-48 h-32 opacity-60" />
+        <LanternPattern className="absolute top-1/3 left-1/4 w-16 h-24 animate-bounce" style={{ animationDuration: "3s" }} />
+        <LanternPattern className="absolute bottom-1/4 right-1/3 w-16 h-24 animate-bounce" style={{ animationDuration: "3.5s" }} />
+        <BambooPattern className="absolute top-0 right-0 w-20 h-40 opacity-30" />
+        <BambooPattern className="absolute bottom-0 left-0 w-20 h-40 opacity-30" />
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8">
+        {/* Logo/Title Area */}
+        <div className="text-center mb-8 animate-in fade-in slide-in-from-top duration-700">
+          <h1 className="mb-2" style={{ 
+            fontFamily: "'Bangers', cursive",
+            fontSize: "clamp(2.5rem, 8vw, 5rem)",
+            lineHeight: "1.1",
+            color: "#9D4EDD",
+            textShadow: "4px 4px 0px #FF6B9D, 8px 8px 0px #FF9E3D",
+            letterSpacing: "0.05em"
+          }}>
+            VN PARTY
           </h1>
-          <p className="text-gray-600">Trò chơi trivia Việt Nam</p>
+          <div className="mb-4" style={{
+            fontFamily: "'Bangers', cursive",
+            fontSize: "clamp(1.8rem, 6vw, 3.5rem)",
+            color: "#FF9E3D",
+            textShadow: "3px 3px 0px #FF6B9D",
+            letterSpacing: "0.05em"
+          }}>
+            Trò chơi trivia Việt Nam
+          </div>
         </div>
 
-        {/* Mode Toggle */}
-        <div className="flex gap-2 mb-6 bg-gray-100 rounded-xl p-1">
-          <button
-            onClick={() => setMode('join')}
-            className={`flex-1 py-3 rounded-lg font-semibold transition-all ${
-              mode === 'join'
-                ? 'bg-white text-purple-600 shadow-md'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            Tham gia
-          </button>
-          <button
-            onClick={() => setMode('create')}
-            className={`flex-1 py-3 rounded-lg font-semibold transition-all ${
-              mode === 'create'
-                ? 'bg-white text-purple-600 shadow-md'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            Tạo phòng
-          </button>
+        {/* Mascot */}
+        <div className="mb-8 animate-in fade-in zoom-in duration-700" style={{ animationDelay: "0.2s" }}>
+          <PhoThePhoenix className="w-48 h-56 md:w-64 md:h-72 drop-shadow-2xl hover:scale-110 transition-transform duration-300" />
         </div>
 
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-            {error}
+        {/* Mascot Name */}
+        <div className="mb-8 text-center animate-in fade-in slide-in-from-bottom duration-700" style={{ animationDelay: "0.3s" }}>
+          <div className="inline-block bg-gradient-to-r from-pink-500 via-purple-500 to-orange-500 p-1 rounded-3xl shadow-lg">
+            <div className="bg-white px-8 py-3 rounded-3xl">
+              <p style={{
+                fontFamily: "'Bangers', cursive",
+                fontSize: "clamp(1.2rem, 4vw, 2rem)",
+                color: "#9D4EDD",
+                letterSpacing: "0.05em"
+              }}>
+                Cùng Phở the Phoenix khám phá tri thức
+              </p>
+            </div>
           </div>
-        )}
+        </div>
 
-        {/* Form */}
-        <div className="space-y-4">
-          {/* Nickname Input */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tên của bạn
-            </label>
-            <input
-              type="text"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="Nhập tên..."
-              maxLength={20}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-            />
-          </div>
+        {/* Game Controls */}
+        <Card className="w-full max-w-md p-8 bg-white/95 backdrop-blur shadow-2xl border-4 border-purple-500 animate-in fade-in slide-in-from-bottom duration-700" style={{ animationDelay: "0.4s", borderRadius: "2rem" }}>
+          <div className="space-y-6">
+            {/* Error Message */}
+            {error && (
+              <div className="p-4 bg-red-50 border-2 border-red-300 rounded-xl text-red-700 font-semibold shadow-md">
+                {error}
+              </div>
+            )}
 
-          {/* Room Code Input (only for join mode) */}
-          {mode === 'join' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Mã phòng
+            {/* Name Input */}
+            <div className="space-y-3">
+              <label className="block" style={{
+                fontFamily: "'Fredoka', sans-serif",
+                fontSize: "1.1rem",
+                color: "#2D1B3D"
+              }}>
+                Tên của bạn:
               </label>
-              <input
+              <div className="relative">
+                <Input
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  placeholder="Nhập tên của bạn..."
+                  maxLength={20}
+                  className="w-full py-6 px-4 rounded-xl border-3 border-purple-300 focus:border-pink-500 transition-colors"
+                  style={{
+                    fontSize: "1.5rem",
+                    fontFamily: "'Fredoka', sans-serif",
+                    background: "#FFF0F5"
+                  }}
+                />
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-semibold">
+                  {nickname.length}/20
+                </div>
+              </div>
+            </div>
+
+            {/* Create Room */}
+            <div>
+              <Button 
+                onClick={handleCreateRoom}
+                disabled={loading || !nickname.trim()}
+                className="w-full py-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                style={{
+                  fontSize: "1.5rem",
+                  fontFamily: "'Fredoka', sans-serif",
+                  background: "linear-gradient(135deg, #FF6B9D 0%, #9D4EDD 100%)",
+                  border: "3px solid #2D1B3D",
+                  color: "#FFFFFF"
+                }}
+              >
+                {loading ? 'Đang xử lý...' : 'TẠO PHÒNG MỚI'}
+              </Button>
+            </div>
+
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t-2 border-purple-300"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <span className="px-4 bg-white" style={{
+                  fontFamily: "'Fredoka', sans-serif",
+                  color: "#7D5A8A",
+                  fontSize: "1.1rem"
+                }}>
+                  HOẶC
+                </span>
+              </div>
+            </div>
+
+            {/* Join Room */}
+            <div className="space-y-3">
+              <label className="block" style={{
+                fontFamily: "'Fredoka', sans-serif",
+                fontSize: "1.1rem",
+                color: "#2D1B3D"
+              }}>
+                Nhập mã phòng:
+              </label>
+              <Input
                 type="text"
+                placeholder="VD: ABC123"
                 value={roomCode}
                 onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-                placeholder="VD: ABC123"
+                className="w-full py-6 px-4 rounded-xl border-3 border-purple-300 focus:border-pink-500 transition-colors"
+                style={{
+                  fontSize: "1.5rem",
+                  fontFamily: "'Fredoka', sans-serif",
+                  textAlign: "center",
+                  letterSpacing: "0.3em",
+                  textTransform: "uppercase"
+                }}
                 maxLength={6}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors uppercase text-center text-2xl font-bold tracking-wider"
               />
+              <Button 
+                onClick={handleJoinRoom}
+                disabled={loading || roomCode.length !== 6 || !nickname.trim()}
+                className="w-full py-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                style={{
+                  fontSize: "1.5rem",
+                  fontFamily: "'Fredoka', sans-serif",
+                  background: (roomCode.length === 6 && nickname.trim()) 
+                    ? "linear-gradient(135deg, #FF9E3D 0%, #FF6B9D 100%)" 
+                    : "#E5E5E5",
+                  border: "3px solid #2D1B3D",
+                  color: (roomCode.length === 6 && nickname.trim()) ? "#FFFFFF" : "#999999"
+                }}
+              >
+                {loading ? 'Đang xử lý...' : 'THAM GIA'}
+              </Button>
             </div>
-          )}
+          </div>
+        </Card>
 
-          {/* Submit Button */}
-          <button
-            onClick={mode === 'create' ? handleCreateRoom : handleJoinRoom}
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-purple-600 to-pink-500 text-white py-4 rounded-xl font-bold text-lg hover:shadow-lg transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    fill="none"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-                Đang xử lý...
-              </span>
-            ) : mode === 'create' ? (
-              '🎉 Tạo phòng mới'
-            ) : (
-              '🚀 Tham gia phòng'
-            )}
-          </button>
+        {/* Footer Message */}
+        <div className="mt-8 text-center animate-in fade-in duration-700" style={{ animationDelay: "0.6s" }}>
+          <p style={{
+            fontFamily: "'Fredoka', sans-serif",
+            fontSize: "1rem",
+            color: "#7D5A8A",
+            maxWidth: "500px"
+          }}>
+            Cùng nhau chơi, cười và tạo kỷ niệm với những trò chơi vui nhộn từ Việt Nam!
+          </p>
         </div>
+      </div>
 
-        {/* Info */}
-        <div className="mt-6 text-center text-sm text-gray-500">
-          {mode === 'create' ? (
-            <p>Bạn sẽ là chủ phòng và có thể bắt đầu trò chơi</p>
-          ) : (
-            <p>Nhập mã phòng từ chủ phòng để tham gia</p>
-          )}
-        </div>
+      {/* Animated Background Blobs */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+        <div 
+          className="absolute rounded-full blur-3xl opacity-20 animate-pulse"
+          style={{
+            width: "400px",
+            height: "400px",
+            background: "radial-gradient(circle, #FF6B9D 0%, transparent 70%)",
+            top: "10%",
+            left: "-10%",
+            animationDuration: "4s"
+          }}
+        />
+        <div 
+          className="absolute rounded-full blur-3xl opacity-20 animate-pulse"
+          style={{
+            width: "500px",
+            height: "500px",
+            background: "radial-gradient(circle, #9D4EDD 0%, transparent 70%)",
+            bottom: "-10%",
+            right: "-10%",
+            animationDuration: "5s",
+            animationDelay: "1s"
+          }}
+        />
+        <div 
+          className="absolute rounded-full blur-3xl opacity-20 animate-pulse"
+          style={{
+            width: "350px",
+            height: "350px",
+            background: "radial-gradient(circle, #FF9E3D 0%, transparent 70%)",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            animationDuration: "6s",
+            animationDelay: "2s"
+          }}
+        />
       </div>
     </div>
   );
 }
+
