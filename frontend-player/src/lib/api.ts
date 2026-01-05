@@ -1,6 +1,15 @@
 import type { CreateRoomResponse, JoinRoomResponse, Room } from '../types/game';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+// Ensure the API base URL always ends with /api
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+  // Remove trailing slash if present
+  const base = envUrl.replace(/\/$/, '');
+  // Ensure /api is appended
+  return `${base}/api`;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiClient {
   private baseUrl: string;
@@ -14,6 +23,7 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    console.log('🌐 API Request:', url, options);
     
     const response = await fetch(url, {
       ...options,
