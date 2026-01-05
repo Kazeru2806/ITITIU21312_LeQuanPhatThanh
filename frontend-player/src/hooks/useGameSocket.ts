@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Socket, Channel } from 'phoenix';
 import type { Room, Question, LeaderboardEntry } from '../types/game';
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:4000/socket';
+// Determine WebSocket URL so it works on both desktop and mobile.
+// We intentionally ignore VITE_WS_URL here to avoid stale IPs.
+const hostname = window.location.hostname || 'localhost';
+const WS_URL = `ws://${hostname}:4000/socket`;
 
 // Event data types
 interface PlayerJoinedData {

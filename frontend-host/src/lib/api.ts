@@ -1,12 +1,11 @@
-import type { CreateRoomResponse, JoinRoomResponse, Room } from '../types/game';
+import type { CreateRoomResponse, Room } from '../types/game';
 
-// Determine API base URL so it works on both desktop and mobile.
-// We intentionally ignore VITE_API_URL here to avoid stale IPs.
-function getApiBaseUrl(): string {
-  const hostname = window.location.hostname || 'localhost';
-  const base = `http://${hostname}:4000`;
+// Ensure the API base URL always ends with /api
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+  const base = envUrl.replace(/\/$/, '');
   return `${base}/api`;
-}
+};
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -22,7 +21,6 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    console.log('🌐 API Request:', url, options);
     
     const response = await fetch(url, {
       ...options,
@@ -40,7 +38,6 @@ class ApiClient {
     return response.json();
   }
 
-  // Create a new room
   async createRoom(config?: {
     total_rounds?: number;
     max_players?: number;
@@ -51,28 +48,10 @@ class ApiClient {
     });
   }
 
-  // Get room information
   async getRoom(roomCode: string): Promise<{ success: boolean; room: Room }> {
     return this.request<{ success: boolean; room: Room }>(`/rooms/${roomCode.toUpperCase()}`);
-  }
-
-  // Join a room
-  async joinRoom(
-    roomCode: string,
-    nickname: string
-  ): Promise<JoinRoomResponse> {
-    return this.request<JoinRoomResponse>(`/rooms/${roomCode.toUpperCase()}/join`, {
-      method: 'POST',
-      body: JSON.stringify({ nickname }),
-    });
-  }
-
-  // Get players in a room
-  async getPlayers(roomCode: string): Promise<{ success: boolean; players: any[] }> {
-    return this.request<{ success: boolean; players: any[] }>(
-      `/rooms/${roomCode.toUpperCase()}/players`
-    );
   }
 }
 
 export const api = new ApiClient();
+

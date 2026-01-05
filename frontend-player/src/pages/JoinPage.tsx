@@ -18,44 +18,6 @@ export function JoinPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleCreateRoom = async () => {
-    if (!nickname.trim()) {
-      setError('Vui lòng nhập tên của bạn');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Create room
-      const roomResponse = await api.createRoom({
-        total_rounds: 5,
-        max_players: 8,
-      });
-
-      const newRoomCode = roomResponse.room.code;
-
-      // Join the room
-      const joinResponse = await api.joinRoom(newRoomCode, nickname);
-
-      // Update store
-      setPlayerInfo(
-        joinResponse.player.id,
-        joinResponse.player.nickname,
-        joinResponse.player.is_host
-      );
-      setRoomCode(newRoomCode);
-
-      // Navigate to lobby
-      navigate('/lobby');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể tạo phòng');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleJoinRoom = async () => {
     if (!nickname.trim()) {
       setError('Vui lòng nhập tên của bạn');
@@ -186,40 +148,6 @@ export function JoinPage() {
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-semibold">
                   {nickname.length}/20
                 </div>
-              </div>
-            </div>
-
-            {/* Create Room */}
-            <div>
-              <Button 
-                onClick={handleCreateRoom}
-                disabled={loading || !nickname.trim()}
-                className="w-full py-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                style={{
-                  fontSize: "1.5rem",
-                  fontFamily: "'Fredoka', sans-serif",
-                  background: "linear-gradient(135deg, #FF6B9D 0%, #9D4EDD 100%)",
-                  border: "3px solid #2D1B3D",
-                  color: "#FFFFFF"
-                }}
-              >
-                {loading ? 'Đang xử lý...' : 'TẠO PHÒNG MỚI'}
-              </Button>
-            </div>
-
-            {/* Divider */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t-2 border-purple-300"></div>
-              </div>
-              <div className="relative flex justify-center">
-                <span className="px-4 bg-white" style={{
-                  fontFamily: "'Fredoka', sans-serif",
-                  color: "#7D5A8A",
-                  fontSize: "1.1rem"
-                }}>
-                  HOẶC
-                </span>
               </div>
             </div>
 

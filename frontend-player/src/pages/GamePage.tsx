@@ -9,7 +9,6 @@ export function GamePage() {
     const navigate = useNavigate();
     const [timeLeft, setTimeLeft] = useState(15);
     const [showResult, setShowResult] = useState(false);
-    const [isCorrect, setIsCorrect] = useState(false);
 
     const {
         playerId,
@@ -51,7 +50,6 @@ export function GamePage() {
             setQuestion(question);
             setTimeLeft(question.time_limit);
             setShowResult(false);
-            setIsCorrect(false);
         },
         onPlayerCommitted: (data) => {
             console.log('Player committed:', data);
@@ -59,7 +57,6 @@ export function GamePage() {
         onRoundScored: (data) => {
             const myScore = data.scores.find(s => s.player_id === playerId);
             if (myScore) {
-                setIsCorrect(myScore.is_correct);
                 setShowResult(true);
             }
 
@@ -227,7 +224,7 @@ export function GamePage() {
                                     </div>
                                 </div>
 
-                                {/* Question Text */}
+                                {/* Player Instructions - NO QUESTION TEXT */}
                                 <div className="text-center mb-8 lg:mb-10">
                                     <div className="inline-block mb-4 lg:mb-6">
                                         <PhoThePhoenix className="w-24 h-28 drop-shadow-lg" />
@@ -237,8 +234,11 @@ export function GamePage() {
                                         color: "#9D4EDD",
                                         textShadow: "3px 3px 0px #FF6B9D"
                                     }}>
-                                        {currentQuestion.text}
+                                        Chọn đáp án của bạn
                                     </h2>
+                                    <p className="text-xl lg:text-2xl text-gray-600 font-semibold">
+                                        Nhìn lên màn hình để xem câu hỏi
+                                    </p>
                                 </div>
 
                                 {/* Answer Options */}
@@ -288,18 +288,14 @@ export function GamePage() {
                                 </div>
                             )}
 
-                            {/* Result */}
+                            {/* Result - Show "Look at screen" instead of actual results */}
                             {showResult && (
-                                <div className={`mt-6 text-center p-6 lg:p-10 rounded-xl border-3 shadow-lg ${isCorrect
-                                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-400'
-                                        : 'bg-gradient-to-r from-red-50 to-pink-50 border-red-400'
-                                    }`}>
-                                    <p className={`text-2xl lg:text-4xl font-black mb-2 lg:mb-4 ${isCorrect ? 'text-green-700' : 'text-red-700'
-                                        }`}>
-                                        {isCorrect ? 'Chính xác! +100 điểm' : 'Sai rồi!'}
+                                <div className="mt-6 text-center p-6 lg:p-10 rounded-xl border-3 shadow-lg bg-gradient-to-r from-purple-50 to-pink-50 border-purple-400">
+                                    <p className="text-2xl lg:text-4xl font-black mb-2 lg:mb-4 text-purple-700">
+                                        Đã gửi đáp án!
                                     </p>
-                                    <p className="text-base lg:text-xl text-gray-700 mt-2 lg:mt-4 font-semibold">
-                                        Đáp án đúng: <span className="font-black text-lg lg:text-2xl">{currentQuestion.correct}</span>
+                                    <p className="text-xl lg:text-2xl text-gray-700 mt-2 lg:mt-4 font-semibold">
+                                        Nhìn lên màn hình để xem kết quả
                                     </p>
                                 </div>
                             )}
@@ -309,9 +305,7 @@ export function GamePage() {
                         {showResult && (
                             <div className="text-center mt-4 p-5 lg:p-8 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200">
                                 <p className="text-purple-700 font-black text-lg lg:text-2xl">
-                                    {currentRound < totalRounds 
-                                        ? 'Đang chuyển sang câu hỏi tiếp theo...' 
-                                        : 'Trò chơi kết thúc! Đang chuyển đến kết quả...'}
+                                    Nhìn lên màn hình để xem kết quả và câu hỏi tiếp theo
                                 </p>
                             </div>
                         )}
