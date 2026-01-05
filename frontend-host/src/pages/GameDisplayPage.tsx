@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDisplayStore } from '../store/displayStore';
 import { useDisplaySocket } from '../hooks/useDisplaySocket';
@@ -32,11 +32,18 @@ export function GameDisplayPage() {
     }
   }, [roomCode, navigate]);
 
-  // Timer countdown
+  // Timer countdown - reset when new question arrives
   useEffect(() => {
     if (!currentQuestion) return;
 
-    setLocalTimeLeft(timeLeft);
+    // Reset timer to the question's time limit when question changes
+    setLocalTimeLeft(currentQuestion.time_limit);
+  }, [currentQuestion]);
+
+  // Timer countdown - actually count down
+  useEffect(() => {
+    if (!currentQuestion || roundScores) return; // Don't count down if showing results
+
     const timer = setInterval(() => {
       setLocalTimeLeft((prev) => {
         if (prev <= 1) {
@@ -48,11 +55,12 @@ export function GameDisplayPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [currentQuestion, timeLeft]);
+  }, [currentQuestion, roundScores]);
 
-  useDisplaySocket({
-    roomCode: roomCode || '',
-    onGameState: (state) => {
+  // Update ref on each render so callbacks have access to latest state
+  const callbacksRef = useRef<any>({});
+  callbacksRef.current = {
+    onGameState: (state: any) => {
       if (state.players) setPlayers(state.players);
       setGameState(state.state);
       if (state.current_round && state.total_rounds) {
@@ -63,36 +71,52 @@ export function GameDisplayPage() {
         setTimeLeft(state.current_question.time_limit);
       }
     },
-    onPlayerJoined: (data) => {
+    onPlayerJoined: (data: any) => {
       if (data.players) setPlayers(data.players);
     },
-    onQuestionRevealed: (question) => {
+    onQuestionRevealed: (question: any) => {
       setQuestion(question);
       setTimeLeft(question.time_limit);
       setLocalTimeLeft(question.time_limit);
       setCommittedPlayers(new Set());
       setRoundScores(null);
     },
-    onPlayerCommitted: (data) => {
-      setCommittedPlayers((prev) => new Set([...prev, data.player_id]));
+    onPlayerCommitted: (data: any) => {
+      console.log('✅ Display received player_committed:', data);
+      setCommittedPlayers((prev) => {
+        const updated = new Set([...prev, data.player_id]);
+        console.log('Updated committed players:', Array.from(updated));
+        return updated;
+      });
     },
-    onRoundScored: (data) => {
+    onRoundScored: (data: any) => {
       setRoundScores(data.scores);
       setLeaderboard(data.leaderboard);
       setTimeLeft(0);
       setLocalTimeLeft(0);
     },
-    onRoundStarted: (data) => {
+    onRoundStarted: (data: any) => {
       setRound(data.round, data.total_rounds);
       setRoundScores(null);
       setCommittedPlayers(new Set());
     },
-    onGameEnded: (data) => {
+    onGameEnded: (data: any) => {
       setLeaderboard(data.final_scores);
       if (data.winner) setWinner(data.winner);
       setGameState('game_end');
       setTimeout(() => navigate('/results'), 2000);
     },
+  };
+
+  useDisplaySocket({
+    roomCode: roomCode || '',
+    onGameState: callbacksRef.current.onGameState,
+    onPlayerJoined: callbacksRef.current.onPlayerJoined,
+    onQuestionRevealed: callbacksRef.current.onQuestionRevealed,
+    onPlayerCommitted: callbacksRef.current.onPlayerCommitted,
+    onRoundScored: callbacksRef.current.onRoundScored,
+    onRoundStarted: callbacksRef.current.onRoundStarted,
+    onGameEnded: callbacksRef.current.onGameEnded,
   });
 
   if (!roomCode) return null;

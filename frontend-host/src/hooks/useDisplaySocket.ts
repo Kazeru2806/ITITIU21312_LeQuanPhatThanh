@@ -126,7 +126,7 @@ export function useDisplaySocket({
       channel.leave();
       socket.disconnect();
     };
-  }, [roomCode, onGameState, onPlayerJoined, onGameStarted, onQuestionRevealed, onPlayerCommitted, onRoundScored, onRoundStarted, onGameEnded]);
+  }, [roomCode]); // Only depend on roomCode to prevent reconnection loops
 
   return {
     connected,

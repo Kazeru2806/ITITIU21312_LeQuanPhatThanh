@@ -55,36 +55,19 @@ export function GamePage() {
             console.log('Player committed:', data);
         },
         onRoundScored: (data) => {
-            const myScore = data.scores.find(s => s.player_id === playerId);
-            if (myScore) {
-                setShowResult(true);
-            }
-
-            // Update all player scores from leaderboard
-            if (data.leaderboard && Array.isArray(data.leaderboard)) {
-                // Update each player's score in the store
-                data.leaderboard.forEach(leaderboardEntry => {
-                    const player = players.find(p => p.id === leaderboardEntry.player_id);
-                    if (player) {
-                        updatePlayer(leaderboardEntry.player_id, { score: leaderboardEntry.score });
-                    }
-                });
-            }
-
-            // Update the correct answer if provided
-            if (data.correct_answer && currentQuestion) {
-                setQuestion({
-                    ...currentQuestion,
-                    correct: data.correct_answer
-                });
-            }
+            // Players receive minimal payload: {round, message}
+            // Just show the "look at screen" message
+            console.log('Round scored (player view):', data);
+            setShowResult(true);
         },
         onRoundStarted: (data) => {
+            console.log('Round started:', data);
             setRound(data.round, data.total_rounds);
-            setQuestion(null);
             setShowResult(false);
             setHasCommitted(false);
             setSelectedAnswer(null);
+            // Don't set question to null - wait for the new question to arrive
+            // This prevents white screen
         },
         onGameEnded: () => {
             console.log('🎉 Game ended! Navigating to results...');
@@ -243,23 +226,29 @@ export function GamePage() {
 
                                 {/* Answer Options */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
-                                {currentQuestion.options.map((option, index) => (
-                                    <button
-                                        key={index}
-                                        onClick={() => handleSelectAnswer(option)}
-                                        disabled={hasCommitted || timeLeft === 0}
-                                        className={`p-6 rounded-2xl font-black text-lg transition-all transform hover:scale-105 border-3 ${selectedAnswer === option
-                                                ? 'vietnamese-accent text-white shadow-2xl scale-105 border-transparent vietnamese-glow'
-                                                : 'bg-gradient-to-r from-purple-50 to-pink-50 text-gray-800 hover:from-purple-100 hover:to-pink-100 border-purple-200'
-                                            } ${(hasCommitted || timeLeft === 0) && 'opacity-50 cursor-not-allowed hover:scale-100'
-                                            } ${showResult && option === currentQuestion.correct
-                                                ? 'ring-4 ring-green-400 bg-gradient-to-r from-green-100 to-emerald-100 border-green-400'
-                                                : ''
-                                            }`}
-                                    >
-                                        {option}
-                                    </button>
-                                ))}
+                                {currentQuestion.options.map((option, index) => {
+                                    // Handle both string options ["A", "B", "C", "D"] and object options [{id: "A", text: "..."}]
+                                    const optionId = typeof option === 'string' ? option : (option as any).id || option;
+                                    const optionText = typeof option === 'string' ? option : (option as any).text || option;
+                                    
+                                    return (
+                                        <button
+                                            key={index}
+                                            onClick={() => handleSelectAnswer(optionId)}
+                                            disabled={hasCommitted || timeLeft === 0}
+                                            className={`p-6 rounded-2xl font-black text-lg transition-all transform hover:scale-105 border-3 ${selectedAnswer === optionId
+                                                    ? 'vietnamese-accent text-white shadow-2xl scale-105 border-transparent vietnamese-glow'
+                                                    : 'bg-gradient-to-r from-purple-50 to-pink-50 text-gray-800 hover:from-purple-100 hover:to-pink-100 border-purple-200'
+                                                } ${(hasCommitted || timeLeft === 0) && 'opacity-50 cursor-not-allowed hover:scale-100'
+                                                } ${showResult && optionId === currentQuestion.correct
+                                                    ? 'ring-4 ring-green-400 bg-gradient-to-r from-green-100 to-emerald-100 border-green-400'
+                                                    : ''
+                                                }`}
+                                        >
+                                            {optionId}
+                                        </button>
+                                    );
+                                })}
                             </div>
 
                             {/* Submit Button */}
