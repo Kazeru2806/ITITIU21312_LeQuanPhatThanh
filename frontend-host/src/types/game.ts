@@ -6,6 +6,8 @@ export interface Room {
   total_rounds: number;
   max_players: number;
   started_at?: string;
+  players?: Player[];
+  mode?: 'classic' | 'truth_collapse';
 }
 
 export interface Player {
@@ -20,7 +22,7 @@ export interface Question {
   id: string;
   text: string;
   options: Array<{ id: string; text: string }> | string[];
-  correct: string;
+  correct: string | string[];
   time_limit: number;
 }
 
@@ -28,6 +30,10 @@ export interface LeaderboardEntry {
   player_id: string;
   nickname: string;
   score: number;
+  final_score?: number;
+  tp?: number;
+  di?: number;
+  ps?: number;
 }
 
 export interface CreateRoomResponse {

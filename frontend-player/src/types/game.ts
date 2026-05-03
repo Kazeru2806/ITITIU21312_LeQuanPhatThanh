@@ -18,6 +18,34 @@ export interface Player {
   is_host: boolean;
 }
 
+/** Server snapshot for Truth Collapse mid-game reconnect (refresh / rejoin). */
+export interface TruthResume {
+  round: number;
+  phase: string;
+  message?: string;
+  discussion_seconds?: number;
+  question_id?: string;
+  category?: string;
+  category_label?: string;
+  category_timeline?: string[];
+  category_timeline_labels?: string[];
+  options?: string[];
+  shuffle_preview?: string[];
+  time_left?: number;
+  current_question?: {
+    id: string;
+    options: string[];
+    time_limit: number;
+    shuffle_targets?: string[];
+  };
+  /** Host display only — full question for reconnect during answering. */
+  display_question?: Record<string, unknown>;
+  /** Host display only — same shape as display:round_scored payload. */
+  display_round_scored?: Record<string, unknown>;
+  stats?: Array<{ player_id: string; tp: number; di: number; ps: number; charges: number }>;
+  mode?: string;
+}
+
 // Room data
 export interface Room {
   room_code: string;
@@ -26,15 +54,19 @@ export interface Room {
   total_rounds: number;
   players: Player[];
   started_at?: string;
+  mode?: 'classic' | 'truth_collapse';
+  truth_resume?: TruthResume | null;
 }
 
 // Question data
 export interface Question {
   id: string;
-  text: string;
+  text?: string;
   options: string[];
-  correct: string;
+  correct?: string;
   time_limit: number;
+  shuffle_targets?: string[];
+  remove_targets?: Record<string, string[]>;
 }
 
 // Answer commit

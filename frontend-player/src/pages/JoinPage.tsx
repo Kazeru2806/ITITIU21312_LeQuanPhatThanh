@@ -20,12 +20,12 @@ export function JoinPage() {
 
   const handleJoinRoom = async () => {
     if (!nickname.trim()) {
-      setError('Vui lòng nhập tên của bạn');
+      setError('Please enter your name');
       return;
     }
 
     if (!roomCode.trim()) {
-      setError('Vui lòng nhập mã phòng');
+      setError('Please enter a room code');
       return;
     }
 
@@ -46,7 +46,7 @@ export function JoinPage() {
       // Navigate to lobby
       navigate('/lobby');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể tham gia phòng');
+      setError(err instanceof Error ? err.message : 'Failed to join room');
     } finally {
       setLoading(false);
     }
@@ -87,7 +87,7 @@ export function JoinPage() {
             textShadow: "3px 3px 0px #FF6B9D",
             letterSpacing: "0.05em"
           }}>
-            Trò chơi trivia Việt Nam
+            Vietnamese Party Trivia
           </div>
         </div>
 
@@ -106,7 +106,7 @@ export function JoinPage() {
                 color: "#9D4EDD",
                 letterSpacing: "0.05em"
               }}>
-                Cùng Phở the Phoenix khám phá tri thức
+                Play with Pho the Phoenix
               </p>
             </div>
           </div>
@@ -129,14 +129,14 @@ export function JoinPage() {
                 fontSize: "1.1rem",
                 color: "#2D1B3D"
               }}>
-                Tên của bạn:
+                Your name:
               </label>
               <div className="relative">
                 <Input
                   type="text"
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
-                  placeholder="Nhập tên của bạn..."
+                  placeholder="Enter your name..."
                   maxLength={20}
                   className="w-full py-6 px-4 rounded-xl border-3 border-purple-300 focus:border-pink-500 transition-colors"
                   style={{
@@ -158,11 +158,11 @@ export function JoinPage() {
                 fontSize: "1.1rem",
                 color: "#2D1B3D"
               }}>
-                Nhập mã phòng:
+                Room code:
               </label>
               <Input
                 type="text"
-                placeholder="VD: ABC123"
+                placeholder="e.g. ABC123"
                 value={roomCode}
                 onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
                 className="w-full py-6 px-4 rounded-xl border-3 border-purple-300 focus:border-pink-500 transition-colors"
@@ -189,7 +189,7 @@ export function JoinPage() {
                   color: (roomCode.length === 6 && nickname.trim()) ? "#FFFFFF" : "#999999"
                 }}
               >
-                {loading ? 'Đang xử lý...' : 'THAM GIA'}
+                {loading ? 'Working...' : 'JOIN'}
               </Button>
             </div>
           </div>

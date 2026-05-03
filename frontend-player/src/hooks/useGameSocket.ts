@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Socket, Channel } from 'phoenix';
-import type { Room, Question, LeaderboardEntry } from '../types/game';
+import type { Room, Question, LeaderboardEntry, TruthResume } from '../types/game';
 
 // Determine WebSocket URL so it works on both desktop and mobile.
 // We intentionally ignore VITE_WS_URL here to avoid stale IPs.
@@ -30,6 +30,20 @@ interface GameStartedData {
     round: number;
     total_rounds: number;
     timestamp: string;
+    mode?: string;
+    truth_theme?: { category?: string; category_label?: string | null };
+}
+
+interface DiscussionStartedData {
+    round: number;
+    discussion_seconds: number;
+    mode?: string;
+    question_id?: string;
+    options?: string[];
+    category?: string;
+    category_label?: string;
+    category_timeline?: string[];
+    category_timeline_labels?: string[];
 }
 
 interface PlayerCommittedData {
@@ -46,18 +60,20 @@ interface AnswerRevealedData {
 
 interface RoundScoredData {
     round: number;
-    scores: Array<{
-        player_id: string;
-        is_correct: boolean;
-        points: number;
-    }>;
-    leaderboard: LeaderboardEntry[];
-    correct_answer?: string;
+    mode?: string;
+    message?: string;
+    stats?: Array<{ player_id: string; tp: number; di: number; ps: number; charges: number }>;
 }
 
 interface RoundStartedData {
     round: number;
     total_rounds: number;
+    mode?: string;
+    discussion_seconds?: number;
+    category?: string;
+    category_label?: string;
+    category_timeline_labels?: string[];
+    option_ids?: string[];
 }
 
 interface GameEndedData {
@@ -73,15 +89,25 @@ interface UseGameSocketProps {
     onPlayerJoined?: (data: PlayerJoinedData) => void;
     onPlayerDisconnected?: (data: PlayerDisconnectedData) => void;
     onGameStarted?: (data: GameStartedData) => void;
+    onDiscussionStarted?: (data: DiscussionStartedData) => void;
     onQuestionRevealed?: (question: Question) => void;
     onPlayerCommitted?: (data: PlayerCommittedData) => void;
     onAnswerRevealed?: (data: AnswerRevealedData) => void;
     onRoundScored?: (data: RoundScoredData) => void;
     onRoundStarted?: (data: RoundStartedData) => void;
     onGameEnded?: (data: GameEndedData) => void;
+    onTruthStatsUpdated?: (data: { stats: Array<{ player_id: string; tp: number; di: number; ps: number; charges: number }> }) => void;
+    onDistortionUsed?: (data: any) => void;
     onRematchVoteUpdated?: (data: any) => void;
     onRematchStarting?: () => void;
     onRematchCancelled?: (data?: any) => void;
+    onTruthResultsProgress?: (data: {
+        round: number;
+        acked_count: number;
+        total: number;
+        acked_player_ids: string[];
+    }) => void;
+    onTruthResume?: (resume: TruthResume) => void;
 }
 
 export function useGameSocket({
@@ -92,21 +118,30 @@ export function useGameSocket({
     onPlayerJoined,
     onPlayerDisconnected,
     onGameStarted,
+    onDiscussionStarted,
     onQuestionRevealed,
     onPlayerCommitted,
     onAnswerRevealed,
     onRoundScored,
     onRoundStarted,
     onGameEnded,
+    onTruthStatsUpdated,
+    onDistortionUsed,
     onRematchVoteUpdated,
     onRematchStarting,
     onRematchCancelled,
+    onTruthResultsProgress,
+    onTruthResume,
 }: UseGameSocketProps) {
     const [connected, setConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const socketRef = useRef<Socket | null>(null);
     const channelRef = useRef<Channel | null>(null);
+    const truthProgressRef = useRef(onTruthResultsProgress);
+    truthProgressRef.current = onTruthResultsProgress;
+    const truthResumeRef = useRef(onTruthResume);
+    truthResumeRef.current = onTruthResume;
 
     useEffect(() => {
         // Create socket connection
@@ -120,8 +155,9 @@ export function useGameSocket({
         socket.connect();
         socketRef.current = socket;
 
-        // Join the game channel
-        const channel = socket.channel(`game:${roomCode}`, {
+        // Join the game channel (normalize to uppercase for consistency with backend)
+        const normalizedCode = (roomCode || '').toUpperCase().trim();
+        const channel = socket.channel(`game:${normalizedCode}`, {
             nickname,
             player_id: playerId,
         });
@@ -131,15 +167,16 @@ export function useGameSocket({
         // Handle join response
         channel
             .join()
-            .receive('ok', (response: Room & { current_question?: Question }) => {
+            .receive('ok', (response: Room & { current_question?: Question; truth_resume?: TruthResume | null }) => {
                 console.log('✅ Joined game channel', response);
                 setConnected(true);
                 setError(null);
                 if (onGameState) {
                     onGameState(response);
                 }
-                // If there's a current question (game in progress), trigger the handler
-                if (response.current_question && onQuestionRevealed) {
+                if (response.truth_resume && truthResumeRef.current) {
+                    truthResumeRef.current(response.truth_resume);
+                } else if (response.current_question && onQuestionRevealed) {
                     console.log('❓ Received current question on join:', response.current_question);
                     onQuestionRevealed(response.current_question);
                 }
@@ -166,6 +203,11 @@ export function useGameSocket({
             if (onGameStarted) onGameStarted(data);
         });
 
+        channel.on('discussion_started', (data: DiscussionStartedData) => {
+            console.log('🗣 Discussion started:', data);
+            if (onDiscussionStarted) onDiscussionStarted(data);
+        });
+
         channel.on('question_revealed', (data: Question) => {
             console.log('❓ Question revealed:', data);
             if (onQuestionRevealed) onQuestionRevealed(data);
@@ -186,9 +228,24 @@ export function useGameSocket({
             if (onRoundScored) onRoundScored(data);
         });
 
+        channel.on('truth_stats_updated', (data: any) => {
+            console.log('🧾 Truth stats updated:', data);
+            if (onTruthStatsUpdated) onTruthStatsUpdated(data);
+        });
+
+        channel.on('distortion_used', (data: any) => {
+            console.log('🧩 Distortion used:', data);
+            if (onDistortionUsed) onDistortionUsed(data);
+        });
+
         channel.on('round_started', (data: RoundStartedData) => {
             console.log('🔄 New round started:', data);
             if (onRoundStarted) onRoundStarted(data);
+        });
+
+        channel.on('truth_results_progress', (data: any) => {
+            console.log('✓ Truth results ready:', data);
+            truthProgressRef.current?.(data);
         });
 
         channel.on('game_ended', (data: GameEndedData) => {
@@ -225,10 +282,15 @@ export function useGameSocket({
     }, [roomCode, playerId, nickname]); // Only reconnect if these core values change
 
     // Helper functions to send messages
+    const pushWithTimestamp = (event: string, payload: Record<string, any> = {}) => {
+        const channel = channelRef.current;
+        if (!channel) return null;
+        return channel.push(event, { ...payload, client_timestamp_ms: Date.now() });
+    };
+
     const startGame = () => {
         return new Promise((resolve, reject) => {
-            channelRef.current
-                ?.push('start_game', {})
+            pushWithTimestamp('start_game', {})
                 .receive('ok', resolve)
                 .receive('error', reject);
         });
@@ -236,8 +298,7 @@ export function useGameSocket({
 
     const requestQuestion = (round: number) => {
         return new Promise((resolve, reject) => {
-            channelRef.current
-                ?.push('request_question', { round })
+            pushWithTimestamp('request_question', { round })
                 .receive('ok', resolve)
                 .receive('error', reject);
         });
@@ -245,8 +306,39 @@ export function useGameSocket({
 
     const commitAnswer = (answer: string, questionId: string) => {
         return new Promise((resolve, reject) => {
-            channelRef.current
-                ?.push('commit_answer', { answer, question_id: questionId })
+            pushWithTimestamp('commit_answer', { answer, question_id: questionId })
+                .receive('ok', resolve)
+                .receive('error', reject);
+        });
+    };
+
+    const submitPrediction = (optionId: string) => {
+        return new Promise((resolve, reject) => {
+            pushWithTimestamp('submit_prediction', { option_id: optionId })
+                .receive('ok', resolve)
+                .receive('error', reject);
+        });
+    };
+
+    const useDistortion = (action: string, payload: Record<string, any> = {}) => {
+        return new Promise((resolve, reject) => {
+            pushWithTimestamp('use_distortion', { action, ...payload })
+                .receive('ok', resolve)
+                .receive('error', reject);
+        });
+    };
+
+    const lockFakeOption = () => {
+        return new Promise((resolve, reject) => {
+            pushWithTimestamp('lock_fake_option', {})
+                .receive('ok', resolve)
+                .receive('error', reject);
+        });
+    };
+
+    const setFakeOptionText = (fakeText: string) => {
+        return new Promise((resolve, reject) => {
+            pushWithTimestamp('set_fake_option_text', { fake_text: fakeText })
                 .receive('ok', resolve)
                 .receive('error', reject);
         });
@@ -254,8 +346,7 @@ export function useGameSocket({
 
     const getState = () => {
         return new Promise((resolve, reject) => {
-            channelRef.current
-                ?.push('get_state', {})
+            pushWithTimestamp('get_state', {})
                 .receive('ok', resolve)
                 .receive('error', reject);
         });
@@ -263,8 +354,7 @@ export function useGameSocket({
 
     const scoreRound = (correctAnswer: string, round: number) => {
         return new Promise((resolve, reject) => {
-            channelRef.current
-                ?.push('score_round', { correct_answer: correctAnswer, round })
+            pushWithTimestamp('score_round', { correct_answer: correctAnswer, round })
                 .receive('ok', resolve)
                 .receive('error', reject);
         });
@@ -272,8 +362,7 @@ export function useGameSocket({
 
     const nextRound = () => {
         return new Promise((resolve, reject) => {
-            channelRef.current
-                ?.push('next_round', {})
+            pushWithTimestamp('next_round', {})
                 .receive('ok', resolve)
                 .receive('error', reject);
         });
@@ -281,8 +370,7 @@ export function useGameSocket({
 
     const requestRematch = () => {
         return new Promise((resolve, reject) => {
-            channelRef.current
-                ?.push('request_rematch', {})
+            pushWithTimestamp('request_rematch', {})
                 .receive('ok', resolve)
                 .receive('error', reject);
         });
@@ -290,8 +378,15 @@ export function useGameSocket({
 
     const declineRematch = () => {
         return new Promise((resolve, reject) => {
-            channelRef.current
-                ?.push('decline_rematch', {})
+            pushWithTimestamp('decline_rematch', {})
+                .receive('ok', resolve)
+                .receive('error', reject);
+        });
+    };
+
+    const truthResultsReady = () => {
+        return new Promise((resolve, reject) => {
+            pushWithTimestamp('truth_results_ready', {})
                 .receive('ok', resolve)
                 .receive('error', reject);
         });
@@ -303,10 +398,15 @@ export function useGameSocket({
         startGame,
         requestQuestion,
         commitAnswer,
+        submitPrediction,
+        useDistortion,
+        lockFakeOption,
+        setFakeOptionText,
         getState,
         scoreRound,
         nextRound,
         requestRematch,
         declineRematch,
+        truthResultsReady,
     };
 }

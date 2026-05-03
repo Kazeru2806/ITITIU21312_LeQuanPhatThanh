@@ -1,11 +1,10 @@
-import type { CreateRoomResponse, Room } from '../types/game';
+import type { CreateRoomResponse, Room, Player } from '../types/game';
 
-// Ensure the API base URL always ends with /api
-const getApiBaseUrl = () => {
-  const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-  const base = envUrl.replace(/\/$/, '');
-  return `${base}/api`;
-};
+// Use dynamic host so it works when host and backend are on same network
+function getApiBaseUrl(): string {
+  const hostname = window.location.hostname || 'localhost';
+  return `http://${hostname}:4000/api`;
+}
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -21,14 +20,28 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+      });
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        throw new Error('Server timeout. Please make sure backend is running on port 4000.');
+      }
+      throw new Error('Failed to fetch. Please check backend server status.');
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }));
@@ -41,6 +54,7 @@ class ApiClient {
   async createRoom(config?: {
     total_rounds?: number;
     max_players?: number;
+    mode?: 'classic' | 'truth_collapse';
   }): Promise<CreateRoomResponse> {
     return this.request<CreateRoomResponse>('/rooms', {
       method: 'POST',
@@ -50,6 +64,28 @@ class ApiClient {
 
   async getRoom(roomCode: string): Promise<{ success: boolean; room: Room }> {
     return this.request<{ success: boolean; room: Room }>(`/rooms/${roomCode.toUpperCase()}`);
+  }
+
+  async getPlayers(roomCode: string): Promise<{ success: boolean; players: Player[] }> {
+    return this.request<{ success: boolean; players: Player[] }>(
+      `/rooms/${roomCode.toUpperCase()}/players`
+    );
+  }
+
+  async getAudit(roomCode: string): Promise<{
+    success: boolean;
+    room_code: string;
+    anchors: Array<{
+      seq: number;
+      event_hash: string;
+      prev_chain_hash: string | null;
+      chain_hash: string;
+      tx_hash: string | null;
+      status: string;
+      inserted_at: string;
+    }>;
+  }> {
+    return this.request(`/rooms/${roomCode.toUpperCase()}/audit`);
   }
 }
 

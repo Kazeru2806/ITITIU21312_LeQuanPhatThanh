@@ -1,0 +1,10 @@
+{
+  "name": "vn-party-loadgen",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "phoenix": "^1.8.3"
+  }
+}
+

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { GameState, Player, Question, LeaderboardEntry } from '../types/game';
 
 interface GameStore {
@@ -6,29 +7,31 @@ interface GameStore {
   playerId: string | null;
   nickname: string | null;
   isHost: boolean;
-  
+
   // Room info
   roomCode: string | null;
   gameState: GameState;
   currentRound: number;
   totalRounds: number;
-  
+  mode: 'classic' | 'truth_collapse';
+
   // Players
   players: Player[];
-  
+
   // Current question
   currentQuestion: Question | null;
   selectedAnswer: string | null;
   hasCommitted: boolean;
-  
+
   // Scores
   leaderboard: LeaderboardEntry[];
-  
+
   // Actions
   setPlayerInfo: (playerId: string, nickname: string, isHost: boolean) => void;
   setRoomCode: (code: string) => void;
   setGameState: (state: GameState) => void;
   setRound: (round: number, total: number) => void;
+  setMode: (mode: 'classic' | 'truth_collapse') => void;
   setPlayers: (players: Player[]) => void;
   addPlayer: (player: Player) => void;
   removePlayer: (playerId: string) => void;
@@ -40,68 +43,9 @@ interface GameStore {
   reset: () => void;
 }
 
-export const useGameStore = create<GameStore>((set) => ({
-  // Initial state
-  playerId: null,
-  nickname: null,
-  isHost: false,
-  roomCode: null,
-  gameState: 'lobby',
-  currentRound: 0,
-  totalRounds: 5,
-  players: [],
-  currentQuestion: null,
-  selectedAnswer: null,
-  hasCommitted: false,
-  leaderboard: [],
-  
-  // Actions
-  setPlayerInfo: (playerId, nickname, isHost) =>
-    set({ playerId, nickname, isHost }),
-  
-  setRoomCode: (code) =>
-    set({ roomCode: code }),
-  
-  setGameState: (state) =>
-    set({ gameState: state }),
-  
-  setRound: (round, total) =>
-    set({ currentRound: round, totalRounds: total }),
-  
-  setPlayers: (players) =>
-    set({ players }),
-  
-  addPlayer: (player) =>
-    set((state) => ({
-      players: [...state.players.filter(p => p.id !== player.id), player]
-    })),
-  
-  removePlayer: (playerId) =>
-    set((state) => ({
-      players: state.players.filter(p => p.id !== playerId)
-    })),
-  
-  updatePlayer: (playerId, updates) =>
-    set((state) => ({
-      players: state.players.map(p =>
-        p.id === playerId ? { ...p, ...updates } : p
-      )
-    })),
-  
-  setQuestion: (question) =>
-    set({ currentQuestion: question, selectedAnswer: null, hasCommitted: false }),
-  
-  setSelectedAnswer: (answer) =>
-    set({ selectedAnswer: answer }),
-  
-  setHasCommitted: (committed) =>
-    set({ hasCommitted: committed }),
-  
-  setLeaderboard: (leaderboard) =>
-    set({ leaderboard }),
-  
-  reset: () =>
-    set({
+export const useGameStore = create<GameStore>()(
+  persist(
+    (set) => ({
       playerId: null,
       nickname: null,
       isHost: false,
@@ -109,10 +53,79 @@ export const useGameStore = create<GameStore>((set) => ({
       gameState: 'lobby',
       currentRound: 0,
       totalRounds: 5,
+      mode: 'classic',
       players: [],
       currentQuestion: null,
       selectedAnswer: null,
       hasCommitted: false,
       leaderboard: [],
+
+      setPlayerInfo: (playerId, nickname, isHost) => set({ playerId, nickname, isHost }),
+
+      setRoomCode: (code) => set({ roomCode: code }),
+
+      setGameState: (state) => set({ gameState: state }),
+
+      setRound: (round, total) => set({ currentRound: round, totalRounds: total }),
+
+      setMode: (mode) => set({ mode }),
+
+      setPlayers: (players) => set({ players }),
+
+      addPlayer: (player) =>
+        set((state) => ({
+          players: [...state.players.filter((p) => p.id !== player.id), player],
+        })),
+
+      removePlayer: (playerId) =>
+        set((state) => ({
+          players: state.players.filter((p) => p.id !== playerId),
+        })),
+
+      updatePlayer: (playerId, updates) =>
+        set((state) => ({
+          players: state.players.map((p) => (p.id === playerId ? { ...p, ...updates } : p)),
+        })),
+
+      setQuestion: (question) =>
+        set({ currentQuestion: question, selectedAnswer: null, hasCommitted: false }),
+
+      setSelectedAnswer: (answer) => set({ selectedAnswer: answer }),
+
+      setHasCommitted: (committed) => set({ hasCommitted: committed }),
+
+      setLeaderboard: (leaderboard) => set({ leaderboard }),
+
+      reset: () =>
+        set({
+          playerId: null,
+          nickname: null,
+          isHost: false,
+          roomCode: null,
+          gameState: 'lobby',
+          currentRound: 0,
+          totalRounds: 5,
+          mode: 'classic',
+          players: [],
+          currentQuestion: null,
+          selectedAnswer: null,
+          hasCommitted: false,
+          leaderboard: [],
+        }),
     }),
-}));
+    {
+      name: 'vn-party-player-session',
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (s) => ({
+        playerId: s.playerId,
+        nickname: s.nickname,
+        isHost: s.isHost,
+        roomCode: s.roomCode,
+        gameState: s.gameState,
+        currentRound: s.currentRound,
+        totalRounds: s.totalRounds,
+        mode: s.mode,
+      }),
+    }
+  )
+);

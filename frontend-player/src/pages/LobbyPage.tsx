@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 import { useGameSocket } from '../hooks/useGameSocket';
+import { api } from '../lib/api';
 import { PhoThePhoenix } from '../components/PhoThePhoenix';
 import { LotusPattern, DragonPattern, LanternPattern, BambooPattern } from '../components/VietnamesePatterns';
 
 export function LobbyPage() {
     const navigate = useNavigate();
     const [copied, setCopied] = useState(false);
+    const [startError, setStartError] = useState<string | null>(null);
+    const [storeHydrated, setStoreHydrated] = useState(() => useGameStore.persist.hasHydrated());
 
     const {
         playerId,
@@ -19,27 +22,59 @@ export function LobbyPage() {
         removePlayer,
         setRound,
         setGameState,
+        setMode,
+        reset,
     } = useGameStore();
+
+    useEffect(() => {
+        if (useGameStore.persist.hasHydrated()) setStoreHydrated(true);
+        return useGameStore.persist.onFinishHydration(() => setStoreHydrated(true));
+    }, []);
 
     // Redirect if not properly joined
     useEffect(() => {
+        if (!storeHydrated) return;
         if (!playerId || !roomCode || !nickname) {
             navigate('/');
         }
-    }, [playerId, roomCode, nickname, navigate]);
+    }, [storeHydrated, playerId, roomCode, nickname, navigate]);
 
     const { connected, error, startGame } = useGameSocket({
         roomCode: roomCode || '',
         playerId: playerId || '',
         nickname: nickname || '',
         onGameState: (state) => {
-            setPlayers(state.players);
+            if (state.players) setPlayers(state.players);
             setRound(state.current_round, state.total_rounds);
             setGameState(state.state);
+            if (state.mode) setMode(state.mode);
+            const tr = state.truth_resume;
+            if (
+                state.state === 'round_start' &&
+                state.mode === 'truth_collapse' &&
+                tr &&
+                (tr.phase === 'discussion' || tr.phase === 'answering' || tr.phase === 'results')
+            ) {
+                navigate('/game');
+            }
         },
-        onPlayerJoined: (data) => {
+        onPlayerJoined: async (data) => {
             console.log('Player joined:', data);
-            // Update player list from broadcast
+            // Fetch players from API (source of truth) - fixes bug where 2nd player
+            // join showed only 1 player due to WebSocket broadcast timing/ordering
+            const code = useGameStore.getState().roomCode;
+            if (code) {
+                try {
+                    const res = await api.getPlayers(code);
+                    if (res.success && res.players) {
+                        setPlayers(res.players);
+                        return;
+                    }
+                } catch {
+                    // Fall through to broadcast payload fallback
+                }
+            }
+            // Fallback: use broadcast payload if API fails or no room code
             if (data.players && Array.isArray(data.players)) {
                 setPlayers(data.players);
             }
@@ -56,9 +91,15 @@ export function LobbyPage() {
 
     const handleStartGame = async () => {
         try {
+            setStartError(null);
             await startGame();
         } catch (err) {
             console.error('Failed to start game:', err);
+            const reason =
+                typeof err === 'object' && err !== null
+                    ? (err as any).reason || (err as any).message
+                    : null;
+            setStartError(reason || (err instanceof Error ? err.message : 'Could not start the game'));
         }
     };
 
@@ -70,7 +111,12 @@ export function LobbyPage() {
         }
     };
 
-    if (!playerId || !roomCode) {
+    const handleReturnMain = () => {
+        reset();
+        navigate('/');
+    };
+
+    if (!storeHydrated || !playerId || !roomCode) {
         return null;
     }
 
@@ -145,12 +191,12 @@ export function LobbyPage() {
                             textShadow: "4px 4px 0px #FF6B9D, 8px 8px 0px #FF9E3D",
                             letterSpacing: "0.05em"
                         }}>
-                            Phòng chờ
+                            Waiting room
                         </h1>
 
                         {/* Room Code */}
                         <div className="inline-flex items-center gap-4 bg-gradient-to-r from-purple-100 to-pink-100 px-8 py-4 rounded-2xl border-2 border-purple-200 shadow-lg mb-4">
-                            <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">Mã phòng:</span>
+                            <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">Room code:</span>
                             <span className="text-4xl font-black tracking-widest" style={{
                                 color: "#9D4EDD",
                                 textShadow: "2px 2px 0px #FF6B9D"
@@ -160,14 +206,14 @@ export function LobbyPage() {
                             <button
                                 onClick={handleCopyCode}
                                 className="ml-2 px-4 py-2 bg-white hover:bg-purple-50 rounded-xl transition-all transform hover:scale-110 border-2 border-purple-200 font-bold text-purple-600"
-                                title="Copy mã phòng"
+                                title="Copy room code"
                             >
-                                {copied ? 'Đã copy!' : 'Copy'}
+                                {copied ? 'Copied!' : 'Copy'}
                             </button>
                         </div>
 
                     {copied && (
-                        <p className="text-sm text-green-600 mt-3 font-semibold">Đã copy mã phòng!</p>
+                        <p className="text-sm text-green-600 mt-3 font-semibold">Room code copied to clipboard.</p>
                     )}
                 </div>
 
@@ -175,13 +221,29 @@ export function LobbyPage() {
                 <div className="mb-6 flex items-center justify-center gap-3">
                     <div className={`w-4 h-4 rounded-full ${connected ? 'bg-green-500 animate-pulse vietnamese-glow' : 'bg-red-500'}`} />
                     <span className={`text-sm font-semibold ${connected ? 'text-green-600' : 'text-red-600'}`}>
-                        {connected ? 'Đã kết nối' : 'Đang kết nối...'}
+                        {connected ? 'Connected' : 'Connecting…'}
                     </span>
+                </div>
+
+                <div className="mb-6 text-center">
+                    <button
+                        type="button"
+                        onClick={handleReturnMain}
+                        className="px-5 py-2 rounded-xl border-2 border-purple-200 bg-white text-purple-700 font-bold hover:bg-purple-50"
+                    >
+                        Return to main screen
+                    </button>
                 </div>
 
                 {error && (
                     <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
                         {error}
+                    </div>
+                )}
+
+                {startError && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                        {startError}
                     </div>
                 )}
 
@@ -192,7 +254,7 @@ export function LobbyPage() {
                             color: "#FF9E3D",
                             textShadow: "3px 3px 0px #FF6B9D"
                         }}>
-                            Người chơi ({players.length}/8)
+                            Players ({players.length}/8)
                         </h2>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -217,11 +279,11 @@ export function LobbyPage() {
                                         <p className="font-bold text-lg lg:text-xl text-gray-800">
                                             {player.nickname}
                                             {player.id === playerId && (
-                                                <span className="ml-2 text-sm lg:text-base font-semibold text-purple-600">(Bạn)</span>
+                                                <span className="ml-2 text-sm lg:text-base font-semibold text-purple-600">(You)</span>
                                             )}
                                         </p>
                                         {player.is_host && (
-                                            <p className="text-xs lg:text-sm font-semibold text-orange-600 uppercase tracking-wide">Chủ phòng</p>
+                                            <p className="text-xs lg:text-sm font-semibold text-orange-600 uppercase tracking-wide">Host</p>
                                         )}
                                     </div>
                                 </div>
@@ -250,8 +312,8 @@ export function LobbyPage() {
                             }}
                         >
                             {players.length < 2
-                                ? `Cần ít nhất 2 người chơi (${players.length}/2)`
-                                : 'Bắt đầu trò chơi'}
+                                ? `Need at least 2 players (${players.length}/2)`
+                                : 'Start game'}
                         </button>
                     )}
 
@@ -259,14 +321,14 @@ export function LobbyPage() {
                     {!isHost && (
                         <div className="text-center py-5 px-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200">
                             <p className="text-gray-700 font-bold text-lg">
-                                Đang chờ chủ phòng bắt đầu trò chơi...
+                                Waiting for the host to start the game…
                             </p>
                         </div>
                     )}
 
                     {/* Info */}
                     <div className="mt-6 text-center">
-                        <p className="text-gray-600 font-medium">Chia sẻ mã phòng với bạn bè để họ tham gia!</p>
+                        <p className="text-gray-600 font-medium">Share the room code with friends so they can join.</p>
                     </div>
                 </div>
             </div>
