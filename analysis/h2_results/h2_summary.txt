@@ -1,6 +1,0 @@
-latency_samples: 6931
-p50_ms: 1.00
-p90_ms: 13.00
-p95_ms: 16.00
-p99_ms: 26.00
-error_rate: 0.0000
