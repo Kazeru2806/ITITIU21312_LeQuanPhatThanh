@@ -4,16 +4,19 @@ import { useGameStore } from '../store/gameStore';
 import { useGameSocket } from '../hooks/useGameSocket';
 import type { TruthResume } from '../types/game';
 import { api } from '../lib/api';
+import { usePhaseTimer } from '../lib/usePhaseTimer';
+import { RoomClosedBanner } from '../components/RoomClosedBanner';
 import { PhoThePhoenix } from '../components/PhoThePhoenix';
 import { LotusPattern, DragonPattern, LanternPattern, BambooPattern } from '../components/VietnamesePatterns';
 
 export function GamePage() {
     const navigate = useNavigate();
     const [storeHydrated, setStoreHydrated] = useState(() => useGameStore.persist.hasHydrated());
-    const [timeLeft, setTimeLeft] = useState(15);
+    const [phaseEndsAtMs, setPhaseEndsAtMs] = useState<number | null>(null);
+    const [roomClosed, setRoomClosed] = useState<{ message: string; redirect_seconds?: number } | null>(null);
+    const [committedIds, setCommittedIds] = useState<Set<string>>(new Set());
     const [showResult, setShowResult] = useState(false);
     const [phase, setPhase] = useState<'transition' | 'discussion' | 'answering' | 'results'>('discussion');
-    const [discussionLeft, setDiscussionLeft] = useState(0);
     const [prediction, setPrediction] = useState<string | null>(null);
     const [truthStats, setTruthStats] = useState<Array<{ player_id: string; tp: number; di: number; ps: number; charges: number }> | null>(null);
     const [pendingDistortion, setPendingDistortion] = useState<'remove_option' | 'swap_category' | 'force_blind' | 'inject_fake_option' | null>(null);
@@ -31,6 +34,12 @@ export function GamePage() {
     } | null>(null);
     const [resultsReadySent, setResultsReadySent] = useState(false);
     const [resultsReadyProgress, setResultsReadyProgress] = useState<{ acked: number; total: number } | null>(null);
+
+    const timeLeft = usePhaseTimer(
+        phase === 'answering' ? phaseEndsAtMs : null,
+        currentQuestion?.time_limit ?? 15
+    );
+    const discussionLeft = usePhaseTimer(phase === 'discussion' ? phaseEndsAtMs : null, 15);
 
     const {
         playerId,
@@ -110,7 +119,10 @@ export function GamePage() {
             setSelectedAnswer(null);
             setPrediction(null);
             setShuffleOrder(null);
-            setDiscussionLeft(resume.discussion_seconds ?? 15);
+            setPhaseEndsAtMs(
+                resume.phase_ends_at_ms ??
+                    Date.now() + (resume.discussion_seconds ?? 15) * 1000
+            );
             setDiscussionMeta({
                 categoryLabel: resume.category_label,
                 timelineLabels: resume.category_timeline_labels,
@@ -138,7 +150,9 @@ export function GamePage() {
                 shuffle_targets: cq.shuffle_targets,
             };
             setQuestion(q);
-            setTimeLeft(resume.time_left ?? cq.time_limit);
+            setPhaseEndsAtMs(
+                resume.phase_ends_at_ms ?? Date.now() + (resume.time_left ?? cq.time_limit) * 1000
+            );
             setShowResult(false);
             setPhase('answering');
             setResultsReadySent(false);
@@ -203,7 +217,7 @@ export function GamePage() {
             setFakeLockConfirmed(false);
             setFakePreview(null);
             if (data.mode === 'truth_collapse') {
-                setDiscussionLeft(15);
+                setPhaseEndsAtMs(Date.now() + 15 * 1000);
                 if (data.truth_theme?.category_label) {
                     setDiscussionMeta({
                         categoryLabel: data.truth_theme.category_label,
@@ -230,7 +244,10 @@ export function GamePage() {
             setSelectedAnswer(null);
             setPrediction(null);
             setShuffleOrder(null);
-            setDiscussionLeft(data.discussion_seconds ?? 15);
+            setPhaseEndsAtMs(
+                (data as { phase_ends_at_ms?: number }).phase_ends_at_ms ??
+                    Date.now() + (data.discussion_seconds ?? 15) * 1000
+            );
             setDiscussionMeta({
                 categoryLabel: data.category_label,
                 timelineLabels: data.category_timeline_labels,
@@ -256,7 +273,10 @@ export function GamePage() {
 
             const q = { ...question, options: filteredOpts };
             setQuestion(q);
-            setTimeLeft(q.time_limit);
+            setPhaseEndsAtMs(
+                (question as { phase_ends_at_ms?: number }).phase_ends_at_ms ??
+                    Date.now() + q.time_limit * 1000
+            );
             setShowResult(false);
             setPhase('answering');
 
@@ -271,7 +291,19 @@ export function GamePage() {
             }
         },
         onPlayerCommitted: (data) => {
-            console.log('Player committed:', data);
+            setCommittedIds((prev) => new Set(prev).add(data.player_id));
+        },
+        onPlayersSync: (data) => {
+            if (data.players) useGameStore.getState().setPlayers(data.players as any);
+        },
+        onPlayerDisconnected: (data) => {
+            if (data.players?.length) useGameStore.getState().setPlayers(data.players as any);
+        },
+        onRoomClosed: (data) => {
+            setRoomClosed({
+                message: data.message || 'The host screen closed. This room has ended.',
+                redirect_seconds: data.redirect_seconds ?? 30,
+            });
         },
         onRoundScored: (data) => {
             console.log('Round scored (player view):', data);
@@ -284,6 +316,7 @@ export function GamePage() {
             setFakeOptionText('');
             setResultsReadySent(false);
             setResultsReadyProgress(null);
+            setCommittedIds(new Set());
         },
         onRoundStarted: (data: any) => {
             console.log('Round started:', data);
@@ -302,7 +335,10 @@ export function GamePage() {
             setFakeLockConfirmed(false);
             setFakePreview(null);
             if (data.mode === 'truth_collapse') {
-                setDiscussionLeft(data.discussion_seconds ?? 15);
+                setPhaseEndsAtMs(
+                (data as { phase_ends_at_ms?: number }).phase_ends_at_ms ??
+                    Date.now() + (data.discussion_seconds ?? 15) * 1000
+            );
                 if (data.category_label) {
                     setDiscussionMeta({
                         categoryLabel: data.category_label,
@@ -323,45 +359,6 @@ export function GamePage() {
             }, 2000);
         },
     });
-
-    // Timer countdown
-    useEffect(() => {
-        if (mode === 'truth_collapse') {
-            if (phase !== 'answering' || !currentQuestion || hasCommitted) return;
-        } else {
-            if (!currentQuestion || hasCommitted) return;
-        }
-
-        const timer = setInterval(() => {
-            setTimeLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-
-        return () => clearInterval(timer);
-    }, [currentQuestion, hasCommitted, phase, mode]);
-
-    // Discussion countdown (Truth Collapse) — reset when round / phase changes
-    useEffect(() => {
-        if (mode !== 'truth_collapse') return;
-        if (phase !== 'discussion') return;
-
-        const timer = setInterval(() => {
-            setDiscussionLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(timer);
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-
-        return () => clearInterval(timer);
-    }, [mode, phase, currentRound]);
 
     // Questions are now automatically requested by the server
 
@@ -609,6 +606,12 @@ export function GamePage() {
 
     return (
         <div className="min-h-screen relative overflow-hidden flex flex-col p-4 lg:p-6">
+            {roomClosed && (
+                <RoomClosedBanner
+                    message={roomClosed.message}
+                    redirectSeconds={roomClosed.redirect_seconds}
+                />
+            )}
             {/* Decorative Background Patterns */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <LotusPattern className="absolute top-10 left-10 w-20 h-20 animate-pulse" />
@@ -677,6 +680,36 @@ export function GamePage() {
                     Return to main screen
                 </button>
             </div>
+
+            {players.length > 0 && (
+                <div className="mb-4 relative z-10 max-w-4xl mx-auto w-full px-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {players.map((p) => {
+                            const committed = committedIds.has(p.id);
+                            const status = !p.connected
+                                ? 'Disconnected'
+                                : committed
+                                  ? 'Answered'
+                                  : 'Playing';
+                            return (
+                                <div
+                                    key={p.id}
+                                    className={`px-3 py-2 rounded-lg border-2 text-sm font-bold ${
+                                        !p.connected
+                                            ? 'bg-gray-100 border-gray-300 text-gray-500'
+                                            : committed
+                                              ? 'bg-green-50 border-green-300 text-green-800'
+                                              : 'bg-purple-50 border-purple-200 text-purple-800'
+                                    }`}
+                                >
+                                    {p.nickname}
+                                    <span className="block text-xs font-semibold opacity-80">{status}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Main Content */}
             <div className="flex-1 flex items-center justify-center relative z-10">

@@ -65,17 +65,11 @@ Apply netem:
 ./scripts/netem/apply.sh moderate
 ```
 
-Run loadgen (8 players × 100 msgs). Defaults: `truth_collapse` room, **500 ms** between each player’s own messages (thesis-style spacing; avoids tiny 10–20 ms bursts that inflate TCP p95 under netem). Optional: `--pattern round-robin` sends one message at a time across players (lower contention, different stress model).
+Run loadgen (8 players × 100 msgs):
 
 ```bash
 node tools/loadgen/latency_loadgen.mjs --host 127.0.0.1 --players 8 --messages 100
-
-# Optional tuning:
-# node tools/loadgen/latency_loadgen.mjs --host 127.0.0.1 --players 8 --messages 20 --interval-ms 500 --pattern parallel
-# node tools/loadgen/latency_loadgen.mjs --host 127.0.0.1 --players 8 --messages 20 --pattern round-robin --join-timeout-ms 120000
 ```
-
-Telemetry rows use event **`submit_prediction`** for this loadgen (not `commit_answer`). Filter SQL/exports accordingly.
 
 Clear netem:
 

@@ -2,10 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Socket, Channel } from 'phoenix';
 import type { Room, Question, LeaderboardEntry, TruthResume } from '../types/game';
 
-// Determine WebSocket URL so it works on both desktop and mobile.
-// We intentionally ignore VITE_WS_URL here to avoid stale IPs.
-const hostname = window.location.hostname || 'localhost';
-const WS_URL = `ws://${hostname}:4000/socket`;
+import { getWsUrl } from '../lib/backendConfig';
 
 // Event data types
 interface PlayerJoinedData {
@@ -24,6 +21,13 @@ interface PlayerJoinedData {
 interface PlayerDisconnectedData {
     player_id: string;
     nickname?: string;
+    players?: Array<{
+        id: string;
+        nickname: string;
+        score: number;
+        connected: boolean;
+        is_host: boolean;
+    }>;
 }
 
 interface GameStartedData {
@@ -108,6 +112,12 @@ interface UseGameSocketProps {
         acked_player_ids: string[];
     }) => void;
     onTruthResume?: (resume: TruthResume) => void;
+    onPlayersSync?: (data: {
+        players: PlayerJoinedData['players'];
+        host_id?: string | null;
+    }) => void;
+    onHostChanged?: (data: { host_id: string; host_nickname: string }) => void;
+    onRoomClosed?: (data: { message: string; redirect_seconds?: number; reason?: string }) => void;
 }
 
 export function useGameSocket({
@@ -132,6 +142,9 @@ export function useGameSocket({
     onRematchCancelled,
     onTruthResultsProgress,
     onTruthResume,
+    onPlayersSync,
+    onHostChanged,
+    onRoomClosed,
 }: UseGameSocketProps) {
     const [connected, setConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -145,7 +158,7 @@ export function useGameSocket({
 
     useEffect(() => {
         // Create socket connection
-        const socket = new Socket(WS_URL, {
+        const socket = new Socket(getWsUrl(), {
             params: {},
             reconnectAfterMs: (tries) => {
                 return [1000, 2000, 5000, 10000][tries - 1] || 10000;
@@ -196,6 +209,18 @@ export function useGameSocket({
         channel.on('player_disconnected', (data: PlayerDisconnectedData) => {
             console.log('👤 Player disconnected:', data);
             if (onPlayerDisconnected) onPlayerDisconnected(data);
+        });
+
+        channel.on('players_sync', (data: { players?: PlayerJoinedData['players']; host_id?: string }) => {
+            if (onPlayersSync && data.players) onPlayersSync(data as { players: NonNullable<PlayerJoinedData['players']>; host_id?: string });
+        });
+
+        channel.on('host_changed', (data: { host_id: string; host_nickname: string }) => {
+            if (onHostChanged) onHostChanged(data);
+        });
+
+        channel.on('room_closed', (data: { message: string; redirect_seconds?: number }) => {
+            if (onRoomClosed) onRoomClosed(data);
         });
 
         channel.on('game_started', (data: GameStartedData) => {
@@ -273,13 +298,26 @@ export function useGameSocket({
             if (onRematchCancelled) onRematchCancelled(data);
         });
 
-        // Cleanup on unmount
+        const heartbeat = () => {
+            const ch = channelRef.current;
+            if (ch) ch.push('heartbeat', {});
+        };
+
+        const hbId = window.setInterval(heartbeat, 10_000);
+
+        const onVis = () => {
+            if (document.visibilityState === 'visible') heartbeat();
+        };
+        document.addEventListener('visibilitychange', onVis);
+
         return () => {
+            window.clearInterval(hbId);
+            document.removeEventListener('visibilitychange', onVis);
             channel.leave();
             socket.disconnect();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [roomCode, playerId, nickname]); // Only reconnect if these core values change
+    }, [roomCode, playerId, nickname]);
 
     // Helper functions to send messages
     const pushWithTimestamp = (event: string, payload: Record<string, any> = {}) => {

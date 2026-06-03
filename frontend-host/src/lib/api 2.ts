@@ -1,16 +1,28 @@
 import type { CreateRoomResponse, Room, Player } from '../types/game';
-import { getApiBaseUrl } from './backendConfig';
+
+// Use dynamic host so it works when host and backend are on same network
+function getApiBaseUrl(): string {
+  const hostname = window.location.hostname || 'localhost';
+  return `http://${hostname}:4000/api`;
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiClient {
-  private get baseUrl() {
-    return getApiBaseUrl();
+  private baseUrl: string;
+
+  constructor(baseUrl: string = API_BASE_URL) {
+    this.baseUrl = baseUrl;
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
     let response: Response;
     try {
@@ -24,11 +36,9 @@ class ApiClient {
       });
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
-        throw new Error(
-          `Server timeout reaching ${this.baseUrl}. Check backend on port 4000 and open the app via http://192.168.64.2:5174 (not localhost).`
-        );
+        throw new Error('Server timeout. Please make sure backend is running on port 4000.');
       }
-      throw new Error(`Failed to reach ${this.baseUrl}. Is the backend running?`);
+      throw new Error('Failed to fetch. Please check backend server status.');
     } finally {
       clearTimeout(timeout);
     }
@@ -80,3 +90,5 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+
+

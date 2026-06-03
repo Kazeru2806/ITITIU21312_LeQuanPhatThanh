@@ -1,31 +1,16 @@
 import type { CreateRoomResponse, JoinRoomResponse, Room } from '../types/game';
-
-// Determine API base URL so it works on both desktop and mobile.
-// We intentionally ignore VITE_API_URL here to avoid stale IPs.
-function getApiBaseUrl(): string {
-  const hostname = window.location.hostname || 'localhost';
-  const base = `http://${hostname}:4000`;
-  return `${base}/api`;
-}
-
-const API_BASE_URL = getApiBaseUrl();
+import { getApiBaseUrl } from './backendConfig';
 
 class ApiClient {
-  private baseUrl: string;
-
-  constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl;
+  private get baseUrl() {
+    return getApiBaseUrl();
   }
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    console.log('🌐 API Request:', url, options);
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
     let response: Response;
     try {
@@ -39,9 +24,11 @@ class ApiClient {
       });
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
-        throw new Error('Server timeout. Please make sure backend is running on port 4000.');
+        throw new Error(
+          `Server timeout reaching ${this.baseUrl}. Check backend on port 4000 and open http://192.168.64.2:5173 (not localhost).`
+        );
       }
-      throw new Error('Failed to fetch. Please check backend server status.');
+      throw new Error(`Failed to reach ${this.baseUrl}. Is the backend running?`);
     } finally {
       clearTimeout(timeout);
     }
@@ -54,7 +41,6 @@ class ApiClient {
     return response.json();
   }
 
-  // Create a new room
   async createRoom(config?: {
     total_rounds?: number;
     max_players?: number;
@@ -65,23 +51,24 @@ class ApiClient {
     });
   }
 
-  // Get room information
   async getRoom(roomCode: string): Promise<{ success: boolean; room: Room }> {
     return this.request<{ success: boolean; room: Room }>(`/rooms/${roomCode.toUpperCase()}`);
   }
 
-  // Join a room
   async joinRoom(
     roomCode: string,
-    nickname: string
+    nickname: string,
+    playerId?: string | null
   ): Promise<JoinRoomResponse> {
+    const body: { nickname: string; player_id?: string } = { nickname };
+    if (playerId) body.player_id = playerId;
+
     return this.request<JoinRoomResponse>(`/rooms/${roomCode.toUpperCase()}/join`, {
       method: 'POST',
-      body: JSON.stringify({ nickname }),
+      body: JSON.stringify(body),
     });
   }
 
-  // Get players in a room
   async getPlayers(roomCode: string): Promise<{ success: boolean; players: any[] }> {
     return this.request<{ success: boolean; players: any[] }>(
       `/rooms/${roomCode.toUpperCase()}/players`

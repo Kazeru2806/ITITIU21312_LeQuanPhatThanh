@@ -4,6 +4,7 @@ import { useGameStore } from '../store/gameStore';
 import { useGameSocket } from '../hooks/useGameSocket';
 import { api } from '../lib/api';
 import { PhoThePhoenix } from '../components/PhoThePhoenix';
+import { copyText } from '../lib/clipboard';
 import { LotusPattern, DragonPattern, LanternPattern, BambooPattern } from '../components/VietnamesePatterns';
 
 export function LobbyPage() {
@@ -23,6 +24,7 @@ export function LobbyPage() {
         setRound,
         setGameState,
         setMode,
+        setPlayerInfo,
         reset,
     } = useGameStore();
 
@@ -80,12 +82,43 @@ export function LobbyPage() {
             }
         },
         onPlayerDisconnected: (data) => {
-            removePlayer(data.player_id);
+            if (data.players && Array.isArray(data.players)) {
+                setPlayers(data.players);
+            } else {
+                removePlayer(data.player_id);
+            }
         },
         onGameStarted: (data) => {
             setRound(data.round, data.total_rounds);
             setGameState('round_start');
             navigate('/game');
+        },
+        onPlayersSync: (data) => {
+            if (data.players) {
+                setPlayers(data.players);
+                const me = data.players.find((p) => p.id === playerId);
+                if (me && playerId && nickname) {
+                    setPlayerInfo(playerId, nickname, me.is_host);
+                }
+            }
+        },
+        onRoomClosed: () => {
+            reset();
+            navigate('/');
+        },
+        onHostChanged: (data) => {
+            const list = useGameStore.getState().players;
+            if (list.length) {
+                setPlayers(
+                    list.map((p) => ({
+                        ...p,
+                        is_host: p.id === data.host_id,
+                    }))
+                );
+            }
+            if (playerId && nickname) {
+                setPlayerInfo(playerId, nickname, data.host_id === playerId);
+            }
         },
     });
 
@@ -103,11 +136,13 @@ export function LobbyPage() {
         }
     };
 
-    const handleCopyCode = () => {
+    const handleCopyCode = async () => {
         if (roomCode) {
-            navigator.clipboard.writeText(roomCode);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            const ok = await copyText(roomCode);
+            if (ok) {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+            }
         }
     };
 
@@ -254,7 +289,7 @@ export function LobbyPage() {
                             color: "#FF9E3D",
                             textShadow: "3px 3px 0px #FF6B9D"
                         }}>
-                            Players ({players.length}/8)
+                            Players ({players.filter((p) => p.connected).length}/{players.length} online)
                         </h2>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -282,9 +317,14 @@ export function LobbyPage() {
                                                 <span className="ml-2 text-sm lg:text-base font-semibold text-purple-600">(You)</span>
                                             )}
                                         </p>
-                                        {player.is_host && (
-                                            <p className="text-xs lg:text-sm font-semibold text-orange-600 uppercase tracking-wide">Host</p>
-                                        )}
+                                        <div className="flex gap-2 flex-wrap">
+                                            {player.is_host && (
+                                                <p className="text-xs lg:text-sm font-semibold text-orange-600 uppercase tracking-wide">Host</p>
+                                            )}
+                                            <p className={`text-xs lg:text-sm font-semibold uppercase ${player.connected ? 'text-green-600' : 'text-gray-500'}`}>
+                                                {player.connected ? 'Online' : 'Absent'}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
 

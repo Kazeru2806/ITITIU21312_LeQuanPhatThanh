@@ -12,6 +12,8 @@ export function JoinPage() {
   const navigate = useNavigate();
   const setPlayerInfo = useGameStore((state) => state.setPlayerInfo);
   const setRoomCode = useGameStore((state) => state.setRoomCode);
+  const savedPlayerId = useGameStore((state) => state.playerId);
+  const savedRoomCode = useGameStore((state) => state.roomCode);
   
   const [roomCode, setRoomCodeInput] = useState("");
   const [nickname, setNickname] = useState("");
@@ -33,7 +35,14 @@ export function JoinPage() {
     setError(null);
 
     try {
-      const response = await api.joinRoom(roomCode, nickname);
+      const rejoinId =
+        savedPlayerId &&
+        savedRoomCode &&
+        savedRoomCode.toUpperCase() === roomCode.toUpperCase()
+          ? savedPlayerId
+          : undefined;
+
+      const response = await api.joinRoom(roomCode, nickname, rejoinId);
 
       // Update store
       setPlayerInfo(

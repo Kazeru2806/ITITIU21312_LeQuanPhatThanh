@@ -2,11 +2,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useDisplayStore } from '../store/displayStore';
+import { PhoThePhoenix } from '../components/PhoThePhoenix';
+import { HostPageShell, HostSubtitle, HostTitle } from '../components/HostPageShell';
+import { Card } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { getApiBaseUrl } from '../lib/backendConfig';
 
 export function LandingPage() {
   const navigate = useNavigate();
   const setRoomCode = useDisplayStore((state) => state.setRoomCode);
-  
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'classic' | 'truth_collapse'>('classic');
@@ -22,8 +27,7 @@ export function LandingPage() {
         mode,
       });
 
-      const newRoomCode = roomResponse.room.code;
-      setRoomCode(newRoomCode);
+      setRoomCode(roomResponse.room.code);
       navigate('/lobby');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create room');
@@ -33,34 +37,50 @@ export function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 px-4">
-      <div className="bg-white rounded-3xl shadow-2xl p-12 max-w-3xl w-full border-4 border-purple-200">
-        <h1 className="text-7xl font-black text-center mb-3 bg-gradient-to-r from-pink-500 via-purple-500 to-orange-500 bg-clip-text text-transparent">
-          VN PARTY
-        </h1>
-        <p className="text-2xl text-center text-gray-700 mb-2 font-bold">
-          Host Screen
+    <HostPageShell>
+      <div className="flex flex-col items-center justify-center min-h-screen px-4 py-8">
+        <HostTitle>VN PARTY</HostTitle>
+        <p
+          className="text-center mb-6"
+          style={{
+            fontFamily: "'Bangers', cursive",
+            fontSize: 'clamp(1.5rem, 5vw, 2.5rem)',
+            color: '#FF9E3D',
+            textShadow: '3px 3px 0px #FF6B9D',
+          }}
+        >
+          Host Command Center
         </p>
-        <p className="text-center text-gray-500 mb-8">
-          Create room, control flow, monitor fairness and blockchain audit trail.
-        </p>
-        
-        {error && (
-          <div className="p-4 bg-red-50 border-2 border-red-300 rounded-xl text-red-700 font-semibold mb-6">
-            {error}
-          </div>
-        )}
 
-        <div className="mb-7">
-          <p className="text-sm font-semibold text-gray-700 mb-3 text-center uppercase tracking-wider">Game mode</p>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="mb-8">
+          <PhoThePhoenix className="w-40 h-48 md:w-52 md:h-60 drop-shadow-2xl" />
+        </div>
+
+        <HostSubtitle>
+          Create a room, share the code, and run the game on the big screen.
+        </HostSubtitle>
+
+        <Card
+          className="w-full max-w-xl p-8 bg-white/95 backdrop-blur shadow-2xl border-4 border-purple-500"
+          style={{ borderRadius: '2rem' }}
+        >
+          {error && (
+            <div className="p-4 mb-6 bg-red-50 border-2 border-red-300 rounded-xl text-red-700 font-semibold">
+              {error}
+            </div>
+          )}
+
+          <p className="text-sm font-bold text-gray-700 mb-3 text-center uppercase tracking-wider">
+            Game mode
+          </p>
+          <div className="grid grid-cols-2 gap-3 mb-8">
             <button
               type="button"
               onClick={() => setMode('classic')}
               disabled={loading}
-              className={`py-3 rounded-xl border-2 font-semibold transition-colors ${
+              className={`py-4 rounded-xl border-2 font-bold transition-all ${
                 mode === 'classic'
-                  ? 'border-purple-500 bg-purple-50 text-purple-700'
+                  ? 'border-purple-500 bg-purple-50 text-purple-700 scale-105'
                   : 'border-gray-200 bg-white text-gray-600 hover:border-purple-300'
               }`}
             >
@@ -70,29 +90,40 @@ export function LandingPage() {
               type="button"
               onClick={() => setMode('truth_collapse')}
               disabled={loading}
-              className={`py-3 rounded-xl border-2 font-semibold transition-colors ${
+              className={`py-4 rounded-xl border-2 font-bold transition-all ${
                 mode === 'truth_collapse'
-                  ? 'border-pink-500 bg-pink-50 text-pink-700'
+                  ? 'border-pink-500 bg-pink-50 text-pink-700 scale-105'
                   : 'border-gray-200 bg-white text-gray-600 hover:border-pink-300'
               }`}
             >
               Truth Collapse
             </button>
           </div>
-        </div>
 
-        <button
-          onClick={handleCreateRoom}
-          disabled={loading}
-          className="w-full py-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed text-2xl font-bold text-white bg-gradient-to-r from-pink-500 via-purple-500 to-orange-500"
-        >
-          {loading ? 'Creating room...' : `CREATE ROOM (${mode === 'truth_collapse' ? 'TRUTH COLLAPSE' : 'CLASSIC'})`}
-        </button>
+          <Button
+            onClick={handleCreateRoom}
+            disabled={loading}
+            className="w-full py-7 rounded-2xl text-xl font-bold text-white border-[3px] border-[#2D1B3D] shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+            style={{
+              fontFamily: "'Fredoka', sans-serif",
+              background: loading
+                ? '#E5E5E5'
+                : 'linear-gradient(135deg, #FF6B9D 0%, #9D4EDD 100%)',
+            }}
+          >
+            {loading ? 'Creating room…' : `Create room (${mode === 'truth_collapse' ? 'Truth Collapse' : 'Classic'})`}
+          </Button>
 
-        <p className="text-center text-gray-600 mt-6">Share room code with players to start.</p>
+          <p className="text-center text-gray-500 mt-6 text-sm">
+            Open player app at the same server, enter the room code to join.
+          </p>
+          {import.meta.env.DEV && (
+            <p className="text-center text-xs text-gray-400 mt-2 break-all">
+              API: {getApiBaseUrl()}
+            </p>
+          )}
+        </Card>
       </div>
-    </div>
+    </HostPageShell>
   );
 }
-
-

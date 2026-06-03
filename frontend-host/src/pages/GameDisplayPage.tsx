@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDisplayStore } from '../store/displayStore';
 import { useDisplaySocket } from '../hooks/useDisplaySocket';
+import { HostPageShell, HostTitle } from '../components/HostPageShell';
 
 export function GameDisplayPage() {
   const navigate = useNavigate();
@@ -36,6 +37,10 @@ export function GameDisplayPage() {
   } | null>(null);
   const [truthReadyProgress, setTruthReadyProgress] = useState<{ acked: number; total: number } | null>(null);
   const isTruth = mode === 'truth_collapse';
+  const reset = useDisplayStore((s) => s.reset);
+  const [forceEndStep, setForceEndStep] = useState<'idle' | 'confirm'>('idle');
+  const [forceEndCode, setForceEndCode] = useState('');
+  const [forceEndError, setForceEndError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!roomCode) {
@@ -169,6 +174,9 @@ export function GameDisplayPage() {
     onPlayerJoined: (data: any) => {
       if (data.players) setPlayers(data.players);
     },
+    onPlayerDisconnected: (data: any) => {
+      if (data.players) setPlayers(data.players);
+    },
     onDiscussionStarted: (data: any) => {
       // Use event payload as source of truth (avoid stale `mode` closures)
       if (data?.mode && data.mode !== 'truth_collapse') return;
@@ -260,10 +268,11 @@ export function GameDisplayPage() {
     },
   };
 
-  useDisplaySocket({
+  const { requestForceEnd, confirmForceEnd, leaveDisplay } = useDisplaySocket({
     roomCode: roomCode || '',
     onGameState: callbacksRef.current.onGameState,
     onPlayerJoined: callbacksRef.current.onPlayerJoined,
+    onPlayerDisconnected: callbacksRef.current.onPlayerDisconnected,
     onDiscussionStarted: callbacksRef.current.onDiscussionStarted,
     onOptionCountsUpdated: callbacksRef.current.onOptionCountsUpdated,
     onDistortionUsed: callbacksRef.current.onDistortionUsed,
@@ -276,6 +285,33 @@ export function GameDisplayPage() {
   });
 
   if (!roomCode) return null;
+
+  const handleReturnHome = () => {
+    leaveDisplay();
+    reset();
+    navigate('/');
+  };
+
+  const handleRequestForceEnd = async () => {
+    setForceEndError(null);
+    try {
+      await requestForceEnd();
+      setForceEndStep('confirm');
+      setForceEndCode('');
+    } catch (e) {
+      setForceEndError(e instanceof Error ? e.message : 'Could not start end-game flow');
+    }
+  };
+
+  const handleConfirmForceEnd = async () => {
+    setForceEndError(null);
+    try {
+      await confirmForceEnd(forceEndCode.trim().toUpperCase());
+      setForceEndStep('idle');
+    } catch (e) {
+      setForceEndError(e instanceof Error ? e.message : 'Confirmation failed');
+    }
+  };
 
   const getPlayerName = (playerId: string) => {
     return players.find(p => p.id === playerId)?.nickname || 'Unknown';
@@ -293,18 +329,57 @@ export function GameDisplayPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 lg:p-8">
+    <HostPageShell>
+    <div className="min-h-screen text-[#2D1B3D] p-4 lg:p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-5 rounded-2xl border border-fuchsia-500/40 bg-gradient-to-r from-fuchsia-600/20 via-violet-500/15 to-cyan-400/15 px-5 py-4 shadow-[0_0_40px_rgba(168,85,247,0.25)]">
-          <p className="text-xs uppercase tracking-[0.25em] text-fuchsia-200 font-black">Host Command Center</p>
-          <p className="text-sm text-slate-200">Live orchestration view for room `{roomCode}` with fairness, commit and distortion telemetry.</p>
+        <div className="mb-5 rounded-2xl border-2 border-purple-300 bg-white/90 backdrop-blur px-5 py-4 shadow-lg">
+          <HostTitle>Live Game</HostTitle>
+          <p className="text-sm text-[#7D5A8A] text-center font-medium">Room {roomCode} · Round {currentRound}/{totalRounds}</p>
+          <div className="flex flex-wrap justify-center gap-3 mt-4">
+            <button
+              type="button"
+              onClick={handleReturnHome}
+              className="px-4 py-2 rounded-xl border-2 border-gray-300 font-bold text-gray-700 hover:bg-gray-50"
+            >
+              Return to main screen
+            </button>
+            {forceEndStep === 'idle' ? (
+              <button
+                type="button"
+                onClick={handleRequestForceEnd}
+                className="px-4 py-2 rounded-xl border-2 border-red-300 font-bold text-red-700 hover:bg-red-50"
+              >
+                End game early…
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={forceEndCode}
+                  onChange={(e) => setForceEndCode(e.target.value.toUpperCase())}
+                  placeholder={roomCode}
+                  className="px-3 py-2 border-2 border-red-200 rounded-lg font-mono uppercase w-28"
+                />
+                <button
+                  type="button"
+                  onClick={handleConfirmForceEnd}
+                  className="px-3 py-2 rounded-lg bg-red-600 text-white font-bold"
+                >
+                  Confirm
+                </button>
+                <button type="button" onClick={() => setForceEndStep('idle')} className="text-gray-600 font-semibold">
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+          {forceEndError && <p className="text-center text-red-600 text-sm font-semibold mt-2">{forceEndError}</p>}
         </div>
-        {/* Header */}
         <div className="flex justify-between items-center mb-6 gap-4">
-          <div className="bg-slate-900 px-8 py-4 rounded-full text-fuchsia-200 font-black text-2xl shadow-lg border-2 border-fuchsia-500/40">
+          <div className="bg-white px-8 py-4 rounded-full text-purple-700 font-black text-2xl shadow-lg border-2 border-purple-300">
             Round {currentRound}/{totalRounds}
           </div>
-          <div className="bg-slate-900 px-8 py-4 rounded-full text-cyan-200 font-black text-xl shadow-lg border-2 border-cyan-500/40">
+          <div className="bg-white px-8 py-4 rounded-full text-pink-600 font-black text-xl shadow-lg border-2 border-pink-300">
             {roomCode}
           </div>
         </div>
@@ -736,6 +811,7 @@ export function GameDisplayPage() {
         )}
       </div>
     </div>
+    </HostPageShell>
   );
 }
 

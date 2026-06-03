@@ -19,11 +19,11 @@ async function joinRoom(apiBase, roomCode, nickname) {
   return json.player.id;
 }
 
-async function createRoom(apiBase) {
+async function createRoom(apiBase, mode) {
   const res = await fetch(`${apiBase}/rooms`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ mode }),
   });
   if (!res.ok) throw new Error(`create failed: ${res.status}`);
   const json = await res.json();
@@ -45,9 +45,19 @@ async function run() {
   const players = Number(getArg("--players", "8"));
   const messagesPerPlayer = Number(getArg("--messages", "100"));
   const roomCodeArg = getArg("--room", "");
+  /** @type {"truth_collapse"|"classic"} */
+  const gameMode = getArg("--mode", "truth_collapse");
+  const intervalMs = Number(getArg("--interval-ms", "500"));
+  const pattern = getArg("--pattern", "parallel");
+  const joinTimeoutMs = Number(getArg("--join-timeout-ms", "120000"));
+  const socketTimeoutMs = Number(getArg("--socket-timeout-ms", "120000"));
 
-  const roomCode = roomCodeArg ? roomCodeArg.toUpperCase() : await createRoom(apiBase);
-  console.log(`room=${roomCode}`);
+  const roomCode = roomCodeArg
+    ? roomCodeArg.toUpperCase()
+    : await createRoom(apiBase, gameMode);
+  console.log(
+    `room=${roomCode} mode=${gameMode} interval_ms=${intervalMs} pattern=${pattern}`
+  );
 
   // Join N players via HTTP so we have player_id.
   const playerIds = [];
@@ -59,7 +69,10 @@ async function run() {
   // Connect sockets + join channels.
   const channels = [];
   for (let i = 0; i < players; i++) {
-    const socket = new Socket(wsUrl, { params: {} });
+    const socket = new Socket(wsUrl, {
+      params: {},
+      timeout: socketTimeoutMs,
+    });
     socket.connect();
     const channel = socket.channel(`game:${roomCode}`, {
       nickname: `lg_${i + 1}`,
@@ -68,9 +81,12 @@ async function run() {
 
     await new Promise((resolve, reject) => {
       channel
-        .join()
+        .join(joinTimeoutMs)
         .receive("ok", resolve)
-        .receive("error", reject);
+        .receive("error", reject)
+        .receive("timeout", () =>
+          reject(new Error(`join timeout (${joinTimeoutMs}ms)`))
+        );
     });
     channels.push({ socket, channel, playerId: playerIds[i] });
   }
@@ -84,20 +100,36 @@ async function run() {
   });
   console.log("started game");
 
-  // We measure “submit_prediction” because it’s safe (no question_id needed).
-  // Send messagesPerPlayer predictions per player with timestamps.
+  // We measure “submit_prediction” (truth_collapse) — records latency_measurements.
+  // Default interval_ms=500 matches the thesis load (reduces TCP pile-up vs 10–20ms bursts).
   const opts = ["A", "B", "C", "D"];
   const start = Date.now();
 
-  await Promise.all(
-    channels.map(async ({ channel }) => {
-      for (let n = 0; n < messagesPerPlayer; n++) {
-        const option_id = opts[(n + Math.floor(Math.random() * 4)) % 4];
-        channel.push("submit_prediction", { option_id, client_timestamp_ms: Date.now() });
-        await sleep(10 + Math.floor(Math.random() * 10));
+  const sendOne = (channel, n) => {
+    const option_id = opts[(n + Math.floor(Math.random() * 4)) % 4];
+    channel.push("submit_prediction", {
+      option_id,
+      client_timestamp_ms: Date.now(),
+    });
+  };
+
+  if (pattern === "round-robin") {
+    for (let n = 0; n < messagesPerPlayer; n++) {
+      for (const { channel } of channels) {
+        sendOne(channel, n);
+        await sleep(intervalMs);
       }
-    })
-  );
+    }
+  } else {
+    await Promise.all(
+      channels.map(async ({ channel }) => {
+        for (let n = 0; n < messagesPerPlayer; n++) {
+          sendOne(channel, n);
+          await sleep(intervalMs);
+        }
+      })
+    );
+  }
 
   const dur = Date.now() - start;
   console.log(`sent ${(players * messagesPerPlayer)} messages in ${dur}ms`);

@@ -16,6 +16,7 @@ export interface Player {
   score: number;
   connected: boolean;
   is_host: boolean;
+  status?: 'online' | 'absent';
 }
 
 /** Server snapshot for Truth Collapse mid-game reconnect (refresh / rejoin). */
@@ -32,6 +33,7 @@ export interface TruthResume {
   options?: string[];
   shuffle_preview?: string[];
   time_left?: number;
+  phase_ends_at_ms?: number;
   current_question?: {
     id: string;
     options: string[];
