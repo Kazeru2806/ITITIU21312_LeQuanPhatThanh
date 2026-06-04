@@ -147,6 +147,14 @@ export function LobbyPage() {
     };
 
     const handleReturnMain = async () => {
+        const code = useGameStore.getState().roomCode;
+        if (code) {
+            try {
+                await api.closeRoom(code);
+            } catch {
+                // ignore
+            }
+        }
         try {
             await leaveRoom();
         } catch {

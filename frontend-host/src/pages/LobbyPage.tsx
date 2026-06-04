@@ -104,6 +104,14 @@ export function LobbyPage() {
   };
 
   const handleReturnHome = async () => {
+    const code = useDisplayStore.getState().roomCode;
+    if (code) {
+      try {
+        await api.closeRoom(code);
+      } catch {
+        // continue
+      }
+    }
     try {
       await closeRoom();
     } catch {

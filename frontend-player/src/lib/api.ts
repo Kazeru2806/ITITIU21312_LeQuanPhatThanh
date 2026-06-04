@@ -74,6 +74,13 @@ class ApiClient {
       `/rooms/${roomCode.toUpperCase()}/players`
     );
   }
+
+  async closeRoom(roomCode: string): Promise<{ success: boolean; closed: boolean }> {
+    return this.request<{ success: boolean; closed: boolean }>(
+      `/rooms/${roomCode.toUpperCase()}/close`,
+      { method: 'POST', body: '{}' }
+    );
+  }
 }
 
 export const api = new ApiClient();

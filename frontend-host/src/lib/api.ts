@@ -62,6 +62,13 @@ class ApiClient {
     );
   }
 
+  async closeRoom(roomCode: string): Promise<{ success: boolean; closed: boolean }> {
+    return this.request<{ success: boolean; closed: boolean }>(
+      `/rooms/${roomCode.toUpperCase()}/close`,
+      { method: 'POST', body: '{}' }
+    );
+  }
+
   async getAudit(roomCode: string): Promise<{
     success: boolean;
     room_code: string;

@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDisplayStore } from '../store/displayStore';
 import { useDisplaySocket } from '../hooks/useDisplaySocket';
+import { usePhaseTimer } from '../lib/usePhaseTimer';
+import { api } from '../lib/api';
 import { HostPageShell, HostTitle } from '../components/HostPageShell';
 
 export function GameDisplayPage() {
@@ -36,6 +38,9 @@ export function GameDisplayPage() {
     timelineLabels?: string[];
   } | null>(null);
   const [truthReadyProgress, setTruthReadyProgress] = useState<{ acked: number; total: number } | null>(null);
+  const [discussionReadyProgress, setDiscussionReadyProgress] = useState<{ acked: number; total: number } | null>(null);
+  const [discussionEndsAtMs, setDiscussionEndsAtMs] = useState<number | null>(null);
+  const discussionLeft = usePhaseTimer(phase === 'discussion' ? discussionEndsAtMs : null, 15);
   const isTruth = mode === 'truth_collapse';
   const reset = useDisplayStore((s) => s.reset);
   const [forceEndStep, setForceEndStep] = useState<'idle' | 'confirm'>('idle');
@@ -202,7 +207,12 @@ export function GameDisplayPage() {
       setDistortionLog([]);
       setCommittedPlayers(new Set());
       setOptionCounts({ A: 0, B: 0, C: 0, D: 0 });
-      setLocalTimeLeft(data.discussion_seconds || 15);
+      const secs = data.discussion_seconds || 15;
+      setLocalTimeLeft(secs);
+      setDiscussionEndsAtMs(
+        (data as { phase_ends_at_ms?: number }).phase_ends_at_ms ?? Date.now() + secs * 1000
+      );
+      setDiscussionReadyProgress(null);
       setTruthDiscussionMeta({
         categoryLabel: data.category_label,
         timelineLabels: data.category_timeline_labels ?? [],
@@ -273,6 +283,9 @@ export function GameDisplayPage() {
     onTruthResultsProgress: (data: any) => {
       setTruthReadyProgress({ acked: data.acked_count ?? 0, total: data.total ?? 0 });
     },
+    onTruthDiscussionProgress: (data: any) => {
+      setDiscussionReadyProgress({ acked: data.acked_count ?? 0, total: data.total ?? 0 });
+    },
     onGameEnded: (data: any) => {
       setLeaderboard(data.final_scores);
       if (data.winner) setWinner(data.winner);
@@ -300,12 +313,21 @@ export function GameDisplayPage() {
     onRoundStarted: callbacksRef.current.onRoundStarted,
     onGameEnded: callbacksRef.current.onGameEnded,
     onTruthResultsProgress: callbacksRef.current.onTruthResultsProgress,
+    onTruthDiscussionProgress: callbacksRef.current.onTruthDiscussionProgress,
     onRoomClosed: callbacksRef.current.onRoomClosed,
   });
 
   if (!roomCode) return null;
 
   const handleReturnHome = async () => {
+    const code = useDisplayStore.getState().roomCode;
+    if (code) {
+      try {
+        await api.closeRoom(code);
+      } catch {
+        // continue with socket close
+      }
+    }
     try {
       await closeRoom();
     } catch {
@@ -417,9 +439,19 @@ export function GameDisplayPage() {
           ) : phase === 'discussion' ? (
             <div className="bg-white rounded-3xl shadow-2xl p-16 text-center border-4 border-pink-300">
               <h2 className="text-5xl font-black mb-4 text-pink-700">Discussion (before answering)</h2>
+              <div className="flex justify-center mb-6">
+                <div className="w-28 h-28 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center text-5xl font-black text-white border-4 border-green-300 shadow-lg">
+                  {discussionLeft}
+                </div>
+              </div>
               <p className="text-2xl text-gray-600 mb-4">
-                Time left: <span className="text-pink-700 font-black">{localTimeLeft}s</span>
+                Discussion ends in <span className="text-pink-700 font-black">{discussionLeft}s</span>
               </p>
+              {discussionReadyProgress && discussionReadyProgress.total > 0 ? (
+                <p className="text-xl font-bold text-purple-800 mb-4">
+                  Ready to answer: {discussionReadyProgress.acked}/{discussionReadyProgress.total}
+                </p>
+              ) : null}
               <p className="text-lg text-gray-500 mb-10 max-w-2xl mx-auto">
                 The full question is hidden until the answer phase—use this time to talk, bluff, and lock in a prediction on your phone.
               </p>

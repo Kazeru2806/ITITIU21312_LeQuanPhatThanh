@@ -111,6 +111,12 @@ interface UseGameSocketProps {
         total: number;
         acked_player_ids: string[];
     }) => void;
+    onTruthDiscussionProgress?: (data: {
+        round: number;
+        acked_count: number;
+        total: number;
+        acked_player_ids: string[];
+    }) => void;
     onTruthResume?: (resume: TruthResume) => void;
     onPlayersSync?: (data: {
         players: PlayerJoinedData['players'];
@@ -141,6 +147,7 @@ export function useGameSocket({
     onRematchStarting,
     onRematchCancelled,
     onTruthResultsProgress,
+    onTruthDiscussionProgress,
     onTruthResume,
     onPlayersSync,
     onHostChanged,
@@ -177,6 +184,7 @@ export function useGameSocket({
         onRematchStarting,
         onRematchCancelled,
         onTruthResultsProgress,
+        onTruthDiscussionProgress,
         onTruthResume,
         onPlayersSync,
         onHostChanged,
@@ -290,6 +298,10 @@ export function useGameSocket({
 
         channel.on('truth_results_progress', (data: any) => {
             truthProgressRef.current?.(data);
+        });
+
+        channel.on('truth_discussion_progress', (data: any) => {
+            cbRef.current.onTruthDiscussionProgress?.(data);
         });
 
         channel.on('game_ended', (data: GameEndedData) => {
@@ -444,6 +456,14 @@ export function useGameSocket({
         });
     };
 
+    const truthDiscussionReady = () => {
+        return new Promise((resolve, reject) => {
+            pushWithTimestamp('truth_discussion_ready', {})
+                .receive('ok', resolve)
+                .receive('error', reject);
+        });
+    };
+
     const leaveRoom = () => {
         return new Promise<void>((resolve) => {
             const channel = channelRef.current;
@@ -508,5 +528,6 @@ export function useGameSocket({
         requestRematch,
         declineRematch,
         truthResultsReady,
+        truthDiscussionReady,
     };
 }

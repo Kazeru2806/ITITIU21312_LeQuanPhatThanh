@@ -34,7 +34,7 @@ defmodule VnPartyWeb.DisplayChannel do
   @impl true
   def handle_in("close_room", _payload, socket) do
     Game.close_room_session(socket.assigns.room_id)
-    {:stop, :normal, assign(socket, :room_closed_intentionally, true)}
+    {:stop, :normal, {:ok, %{closed: true}}, assign(socket, :room_closed_intentionally, true)}
   end
 
   @impl true

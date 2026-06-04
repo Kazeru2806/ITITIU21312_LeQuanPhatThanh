@@ -176,6 +176,23 @@ defmodule VnPartyWeb.RoomController do
     end
   end
 
+  @doc """
+  POST /api/rooms/:code/close
+  Ends the session for all players (host TV return-to-home fallback).
+  """
+  def close(conn, %{"code" => code}) do
+    case Game.get_room_by_code(code) do
+      nil ->
+        conn
+        |> put_status(:not_found)
+        |> json(%{success: false, error: "Room not found"})
+
+      room ->
+        Game.close_room_session(room.id)
+        json(conn, %{success: true, room_code: room.code, closed: true})
+    end
+  end
+
   # Helper function to format Ecto changeset errors
   defp format_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->

@@ -38,6 +38,12 @@ interface UseDisplaySocketProps {
     total: number;
     acked_player_ids: string[];
   }) => void;
+  onTruthDiscussionProgress?: (data: {
+    round: number;
+    acked_count: number;
+    total: number;
+    acked_player_ids: string[];
+  }) => void;
   onPlayersSync?: (data: { players: Player[]; host_id?: string | null }) => void;
   onRoomClosed?: (data: { message?: string; redirect_seconds?: number }) => void;
 }
@@ -59,6 +65,7 @@ export function useDisplaySocket({
   onRematchApproved,
   onRematchCancelled,
   onTruthResultsProgress,
+  onTruthDiscussionProgress,
   onPlayersSync,
   onRoomClosed,
 }: UseDisplaySocketProps) {
@@ -84,6 +91,7 @@ export function useDisplaySocket({
     onRematchApproved,
     onRematchCancelled,
     onTruthResultsProgress,
+    onTruthDiscussionProgress,
     onPlayersSync,
     onRoomClosed,
   };
@@ -169,6 +177,10 @@ export function useDisplaySocket({
 
     channel.on('display:truth_results_progress', (data) => {
       cbRef.current.onTruthResultsProgress?.(data);
+    });
+
+    channel.on('display:truth_discussion_progress', (data) => {
+      cbRef.current.onTruthDiscussionProgress?.(data);
     });
 
     channel.on('display:game_ended', (data) => {

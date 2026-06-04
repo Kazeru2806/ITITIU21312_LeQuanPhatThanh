@@ -17,6 +17,7 @@ defmodule VnPartyWeb.Router do
     post "/rooms/:code/join", RoomController, :join
     get "/rooms/:code/players", RoomController, :list_players
     get "/rooms/:code/audit", RoomController, :audit
+    post "/rooms/:code/close", RoomController, :close
 
     get "/telemetry/latency.csv", TelemetryController, :latency_csv
   end

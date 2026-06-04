@@ -4,7 +4,7 @@
 
 - First player in an empty room becomes **host** (can start from their phone).
 - Closing the tab or **Return to main screen** removes that player immediately; host badge passes to another connected player.
-- **Return to main screen** on the **host TV** sends `room_closed` to every player and ends the session.
+- **Return to main screen** on the **host TV** calls `POST /api/rooms/:code/close` and broadcasts `room_closed` so every player is sent home immediately.
 
 ## Distortion powers — full limits
 
@@ -25,6 +25,12 @@ All limits are enforced **server-side** (`DistortionRules`). Each use also write
 ### Why room-wide caps?
 
 Without room caps, 8 players could each spam swap/blind and break game flow. Room caps keep distortions **tactical**, not chaotic.
+
+### When to use distortions
+
+- **Discussion phase:** pick a power, then tap **Done — start answering**. Powers apply when the answer phase begins.
+- **Results phase:** same flow before the next round.
+- Tap **Done** early with all players ready to skip the discussion timer.
 
 ## Charges (distortion power)
 

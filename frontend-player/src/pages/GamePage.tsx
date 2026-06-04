@@ -6,6 +6,7 @@ import type { TruthResume } from '../types/game';
 import { api } from '../lib/api';
 import { usePhaseTimer } from '../lib/usePhaseTimer';
 import { RoomClosedBanner } from '../components/RoomClosedBanner';
+import { TruthDistortionPanel } from '../components/TruthDistortionPanel';
 import { PhoThePhoenix } from '../components/PhoThePhoenix';
 import { LotusPattern, DragonPattern, LanternPattern, BambooPattern } from '../components/VietnamesePatterns';
 
@@ -34,6 +35,8 @@ export function GamePage() {
     } | null>(null);
     const [resultsReadySent, setResultsReadySent] = useState(false);
     const [resultsReadyProgress, setResultsReadyProgress] = useState<{ acked: number; total: number } | null>(null);
+    const [discussionReadySent, setDiscussionReadySent] = useState(false);
+    const [discussionReadyProgress, setDiscussionReadyProgress] = useState<{ acked: number; total: number } | null>(null);
 
     const {
         playerId,
@@ -184,7 +187,7 @@ export function GamePage() {
         }
     };
 
-    const { commitAnswer, submitPrediction, useDistortion, truthResultsReady, lockFakeOption, setFakeOptionText: submitFakeOptionTextApi, leaveRoom, connected, error: socketError } = useGameSocket({
+    const { commitAnswer, submitPrediction, useDistortion, truthResultsReady, truthDiscussionReady, lockFakeOption, setFakeOptionText: submitFakeOptionTextApi, leaveRoom, connected, error: socketError } = useGameSocket({
         roomCode: roomCode || '',
         playerId: playerId || '',
         nickname: nickname || '',
@@ -238,6 +241,8 @@ export function GamePage() {
             setFakeOptionText('');
             setFakeLockConfirmed(false);
             setFakePreview(null);
+            setDiscussionReadySent(false);
+            setDiscussionReadyProgress(null);
         },
         onDiscussionStarted: (data) => {
             if (data.mode) setMode(data.mode as any);
@@ -252,6 +257,10 @@ export function GamePage() {
                 (data as { phase_ends_at_ms?: number }).phase_ends_at_ms ??
                     Date.now() + (data.discussion_seconds ?? 15) * 1000
             );
+            setDiscussionReadySent(false);
+            setDiscussionReadyProgress(null);
+            setPendingDistortion(null);
+            setDistortionLocked(false);
             setDiscussionMeta({
                 categoryLabel: data.category_label,
                 timelineLabels: data.category_timeline_labels,
@@ -263,6 +272,8 @@ export function GamePage() {
             setFakeOptionText('');
             setFakeLockConfirmed(false);
             setFakePreview(null);
+            setDiscussionReadySent(false);
+            setDiscussionReadyProgress(null);
         },
         onQuestionRevealed: (question) => {
             console.log('❓ Question revealed:', question);
@@ -368,6 +379,12 @@ export function GamePage() {
         onTruthResultsProgress: (data) => {
             setResultsReadyProgress({ acked: data.acked_count, total: data.total });
         },
+        onTruthDiscussionProgress: (data) => {
+            setDiscussionReadyProgress({ acked: data.acked_count, total: data.total });
+        },
+        onTruthStatsUpdated: (data) => {
+            if (data?.stats) setTruthStats(data.stats);
+        },
         onGameEnded: () => {
             console.log('🎉 Game ended! Navigating to results...');
             // Small delay to let players see final scores
@@ -396,6 +413,14 @@ export function GamePage() {
     };
 
     const handleReturnMain = async () => {
+        const code = useGameStore.getState().roomCode;
+        if (code) {
+            try {
+                await api.closeRoom(code);
+            } catch {
+                // ignore
+            }
+        }
         try {
             await leaveRoom();
         } catch {
@@ -417,34 +442,45 @@ export function GamePage() {
         }
     };
 
+    const submitPendingDistortion = async () => {
+        if (!pendingDistortion || distortionLocked) return;
+        if (pendingDistortion === 'remove_option' && !distortionTarget) {
+            setDistortionToast('Choose a target player for Remove option.');
+            return;
+        }
+        if (pendingDistortion === 'inject_fake_option' && !fakeLockConfirmed) {
+            setDistortionToast('Confirm fake-option lock first.');
+            return;
+        }
+        if (pendingDistortion === 'inject_fake_option' && fakeOptionText.trim().length < 3) {
+            setDistortionToast('Type fake option text (at least 3 chars).');
+            return;
+        }
+        if (pendingDistortion === 'inject_fake_option') {
+            await submitFakeOptionTextApi(fakeOptionText);
+        } else {
+            const payload: Record<string, string> =
+                pendingDistortion === 'remove_option' ? { target_player_id: distortionTarget } : {};
+            await useDistortion(pendingDistortion, payload);
+        }
+        setDistortionLocked(true);
+        setDistortionToast(null);
+    };
+
+    const handleDiscussionReady = async () => {
+        try {
+            await submitPendingDistortion();
+            await truthDiscussionReady();
+            setDiscussionReadySent(true);
+        } catch (e) {
+            console.error('truth_discussion_ready failed', e);
+            setDistortionToast(e instanceof Error ? e.message : 'Could not confirm — try again.');
+        }
+    };
+
     const handleTruthResultsReady = async () => {
         try {
-            if (!distortionLocked && pendingDistortion) {
-                if (pendingDistortion === 'remove_option' && !distortionTarget) {
-                    setDistortionToast('Choose a target player for Remove option.');
-                    return;
-                }
-                if (pendingDistortion === 'inject_fake_option' && !fakeLockConfirmed) {
-                    setDistortionToast('Confirm fake-option lock first.');
-                    return;
-                }
-
-                if (pendingDistortion === 'inject_fake_option' && fakeOptionText.trim().length < 3) {
-                    setDistortionToast('Type fake option text (at least 3 chars).');
-                    return;
-                }
-
-                if (pendingDistortion === 'inject_fake_option') {
-                    await submitFakeOptionTextApi(fakeOptionText);
-                } else {
-                    const payload: Record<string, any> =
-                        pendingDistortion === 'remove_option'
-                            ? { target_player_id: distortionTarget }
-                            : {};
-                    await useDistortion(pendingDistortion, payload);
-                }
-                setDistortionLocked(true);
-            }
+            await submitPendingDistortion();
 
             await truthResultsReady();
             setResultsReadySent(true);
@@ -596,6 +632,17 @@ export function GamePage() {
                         <div className="flex justify-center mb-4">
                             <PhoThePhoenix className="w-32 h-36 drop-shadow-lg" />
                         </div>
+                        <div className="flex justify-center mb-4">
+                            <div
+                                className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl font-black text-white border-4 shadow-lg ${
+                                    discussionLeft > 5
+                                        ? 'bg-gradient-to-br from-green-400 to-emerald-500 border-green-300'
+                                        : 'bg-gradient-to-br from-yellow-400 to-orange-500 border-yellow-300 animate-pulse'
+                                }`}
+                            >
+                                {discussionLeft}
+                            </div>
+                        </div>
                         <h2
                             className="text-3xl font-black text-center mb-2"
                             style={{ fontFamily: "'Bangers', cursive", color: '#9D4EDD' }}
@@ -603,7 +650,7 @@ export function GamePage() {
                             Discussion phase
                         </h2>
                         <p className="text-center text-gray-600 font-semibold mb-2">
-                            Timer: <span className="text-pink-600 font-black">{discussionLeft}s</span>
+                            Time left: <span className="text-pink-600 font-black">{discussionLeft}s</span>
                         </p>
                         <p className="text-center text-gray-600 text-sm mb-6">
                             Watch the host screen for the full question. Lock in a prediction below.
@@ -647,6 +694,26 @@ export function GamePage() {
                                 </button>
                             ))}
                         </div>
+
+                        <TruthDistortionPanel
+                            myCharges={myCharges}
+                            players={players}
+                            pendingDistortion={pendingDistortion}
+                            distortionTarget={distortionTarget}
+                            distortionLocked={distortionLocked}
+                            distortionToast={distortionToast}
+                            fakeLockConfirmed={fakeLockConfirmed}
+                            fakeOptionText={fakeOptionText}
+                            fakePreview={fakePreview}
+                            readySent={discussionReadySent}
+                            readyProgress={discussionReadyProgress}
+                            doneLabel="Done — start answering"
+                            onToggleDistortion={handleToggleDistortion}
+                            onSetDistortionTarget={setDistortionTarget}
+                            onSetFakeOptionText={setFakeOptionText}
+                            onConfirmFakeLock={handleConfirmFakeLock}
+                            onDone={handleDiscussionReady}
+                        />
                     </div>
                 </div>
             </div>

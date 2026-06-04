@@ -1,9 +1,7 @@
 defmodule VnParty.Game.DistortionRules do
   @moduledoc """
   Per-game caps on distortion powers (thesis-defensible, anti-loophole).
-
-  Remove option ("delete answer"): at most #{@max_remove_per_player} per player per game,
-  and at most #{@max_remove_total} across the whole room per game.
+  See `limits_for_ui/0` and `README_GAME_RULES.md` for numeric caps.
   """
 
   @max_remove_per_player 1

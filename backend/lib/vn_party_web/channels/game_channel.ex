@@ -341,7 +341,7 @@ defmodule VnPartyWeb.GameChannel do
   @impl true
   def handle_in("close_room", _payload, socket) do
     Game.close_room_session(socket.assigns.room_id)
-    {:stop, :normal, socket}
+    {:stop, :normal, {:ok, %{closed: true}}, socket}
   end
 
   @impl true
@@ -370,6 +370,11 @@ defmodule VnPartyWeb.GameChannel do
     if Game.room_mode(room) != "truth_collapse" do
       {:reply, {:error, %{reason: "Distortions are only available in Truth Collapse"}}, socket}
     else
+      phase = current_truth_phase(room.id)
+
+      if phase not in ["discussion", "results"] do
+        {:reply, {:error, %{reason: "Distortions can only be used during discussion or results"}}, socket}
+      else
       maybe_record_latency(socket, "use_distortion", payload, %{action: action})
       if action == "inject_fake_option" do
         {:reply, {:error, %{reason: "Use fake-option lock flow first"}}, socket}
@@ -423,6 +428,7 @@ defmodule VnPartyWeb.GameChannel do
 
             {:reply, {:ok, %{used: true, remaining_charges: get_truth_stats(player_id).charges}}, socket}
         end
+      end
       end
       end
     end
@@ -582,6 +588,61 @@ defmodule VnPartyWeb.GameChannel do
       end
 
       {:reply, {:ok, %{received: true}}, socket}
+    end
+  end
+
+  @impl true
+  def handle_in("truth_discussion_ready", payload, socket) do
+    room = Game.get_room!(socket.assigns.room_id)
+
+    if Game.room_mode(room) != "truth_collapse" do
+      {:reply, {:error, %{reason: "Invalid mode"}}, socket}
+    else
+      maybe_record_latency(socket, "truth_discussion_ready", payload, %{})
+      room_id = room.id
+      round = room.current_round
+      player_id = socket.assigns.player_id
+
+      phase = current_truth_phase(room_id)
+
+      if phase != "discussion" do
+        {:reply, {:error, %{reason: "Not in discussion phase"}}, socket}
+      else
+        :ets.insert(:truth_discussion_ack, {{room_id, round, player_id}, true})
+
+        players = Game.list_players(room_id)
+        connected = Enum.filter(players, & &1.connected)
+
+        acked_ids =
+          Enum.filter(connected, fn p ->
+            case :ets.lookup(:truth_discussion_ack, {room_id, round, p.id}) do
+              [_] -> true
+              [] -> false
+            end
+          end)
+          |> Enum.map(& &1.id)
+
+        progress = %{
+          round: round,
+          acked_count: length(acked_ids),
+          total: length(connected),
+          acked_player_ids: acked_ids
+        }
+
+        broadcast_to_both(
+          socket,
+          "truth_discussion_progress",
+          progress,
+          "display:truth_discussion_progress",
+          progress
+        )
+
+        if length(connected) > 0 and length(acked_ids) >= length(connected) do
+          PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:truth_begin_answering, room_id, round})
+        end
+
+        {:reply, {:ok, %{received: true}}, socket}
+      end
     end
   end
 
@@ -848,23 +909,8 @@ defmodule VnPartyWeb.GameChannel do
     key = {:truth_q_started, room_id, round}
     if :ets.insert_new(:round_scored, {key, true}) do
       room = Game.get_room!(room_id)
-      stored = case :ets.lookup(:truth_round_data, {room_id, round}) do
-        [{{^room_id, ^round}, data}] -> data
-        _ -> nil
-      end
-
-      base_question = generate_question_for_mode(room, round)
-      {question, effects} =
-        if stored do
-          conn = count_connected(room_id)
-          q = resize_truth_options_for_players(stored.question, conn)
-          :ets.insert(:truth_round_data, {{room_id, round}, %{question: q, effects: stored.effects}})
-          {q, stored.effects}
-        else
-          {q0, eff} = apply_distortions_for_round(room_id, round, base_question)
-          q = resize_truth_options_for_players(q0, count_connected(room_id))
-          {q, eff}
-        end
+      {question, effects} = prepare_truth_round_question(room, round)
+      :ets.insert(:truth_round_data, {{room_id, round}, %{question: question, effects: effects}})
 
       :ets.insert(:truth_room_phase, {room_id, %{round: round, phase: "answering"}})
       :ets.insert(:truth_answering_mono, {{room_id, round}, System.monotonic_time(:millisecond)})
@@ -1232,6 +1278,18 @@ defmodule VnPartyWeb.GameChannel do
     end)
   end
 
+  defp current_truth_phase(room_id) do
+    case :ets.lookup(:truth_room_phase, room_id) do
+      [{^room_id, %{phase: phase}}] when is_binary(phase) -> phase
+      _ -> nil
+    end
+  end
+
+  defp clear_truth_discussion_acks(room_id, round) do
+    :ets.match_delete(:truth_discussion_ack, {{room_id, round, :_}, :_})
+    :ok
+  end
+
   defp question_time_limit(room) do
     # Classic mode has fixed 15s in mock questions; Truth mode is per-question and stored in commit_windows.
     if Game.room_mode(room) == "truth_collapse" do
@@ -1253,6 +1311,22 @@ defmodule VnPartyWeb.GameChannel do
     {question, effects}
   end
 
+  defp prepare_truth_round_base(room, round) do
+    base_question = generate_question_for_mode(room, round)
+    conn = count_connected(room.id)
+    question = ensure_truth_question_option_capacity(base_question, conn + 1)
+    question = resize_truth_options_for_players(question, conn)
+
+    effects = %{
+      log: [],
+      blind_targets: MapSet.new(),
+      category_timeline: [Map.get(question, :category)],
+      remove_targets: %{}
+    }
+
+    {question, effects}
+  end
+
   defp start_truth_round_flow(socket, room, round) do
     # "Preparing/discussion" phase duration
     discussion_seconds = 15
@@ -1260,8 +1334,9 @@ defmodule VnPartyWeb.GameChannel do
     # Ensure stale dedupe flags from previous runs cannot block answering transition.
     :ets.delete(:round_scored, {{:truth_q_started, room.id, round}, true})
     :ets.delete(:round_scored, {:truth_q_started, room.id, round})
+    clear_truth_discussion_acks(room.id, round)
 
-    {question, effects} = prepare_truth_round_question(room, round)
+    {question, effects} = prepare_truth_round_base(room, round)
 
     set_truth_active_category(room.id, question.category)
 
@@ -1642,6 +1717,7 @@ defmodule VnPartyWeb.GameChannel do
     :ets.match_delete(:truth_answering_mono, {{room_id, :_}, :_})
     :ets.match_delete(:truth_predictions, {{room_id, :_, :_}, :_})
     :ets.match_delete(:truth_results_ack, {{room_id, :_, :_}, :_})
+    :ets.match_delete(:truth_discussion_ack, {{room_id, :_, :_}, :_})
     :ets.match_delete(:truth_question_history, {{room_id, :_}, :_})
     :ets.match_delete(:truth_fake_locks, {{room_id, :_, :_}, :_})
 
