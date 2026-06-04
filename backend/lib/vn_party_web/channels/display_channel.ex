@@ -32,6 +32,12 @@ defmodule VnPartyWeb.DisplayChannel do
   end
 
   @impl true
+  def handle_in("close_room", _payload, socket) do
+    Game.close_room_session(socket.assigns.room_id)
+    {:stop, :normal, socket}
+  end
+
+  @impl true
   def handle_in("request_force_end", _payload, socket) do
     :ets.insert(:force_end_pending, {socket.assigns.room_id, System.system_time(:millisecond)})
 
@@ -88,6 +94,15 @@ defmodule VnPartyWeb.DisplayChannel do
             {:reply, {:error, %{reason: inspect(reason)}}, socket}
         end
     end
+  end
+
+  @impl true
+  def terminate(_reason, socket) do
+    if socket.assigns[:room_id] do
+      Game.close_room_session(socket.assigns.room_id)
+    end
+
+    :ok
   end
 
   defp get_game_state(room) do

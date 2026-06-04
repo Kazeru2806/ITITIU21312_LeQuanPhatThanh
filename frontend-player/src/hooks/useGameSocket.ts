@@ -215,6 +215,11 @@ export function useGameSocket({
             if (onPlayersSync && data.players) onPlayersSync(data as { players: NonNullable<PlayerJoinedData['players']>; host_id?: string });
         });
 
+        channel.on('player_left', (data: PlayerDisconnectedData) => {
+            if (onPlayerDisconnected) onPlayerDisconnected(data);
+            if (onPlayersSync && data.players) onPlayersSync({ players: data.players });
+        });
+
         channel.on('host_changed', (data: { host_id: string; host_nickname: string }) => {
             if (onHostChanged) onHostChanged(data);
         });
@@ -430,9 +435,55 @@ export function useGameSocket({
         });
     };
 
+    const leaveRoom = () => {
+        return new Promise<void>((resolve) => {
+            const channel = channelRef.current;
+            if (!channel) {
+                resolve();
+                return;
+            }
+            channel
+                .push('leave_room', {})
+                .receive('ok', () => {
+                    channel.leave();
+                    socketRef.current?.disconnect();
+                    resolve();
+                })
+                .receive('error', () => {
+                    channel.leave();
+                    socketRef.current?.disconnect();
+                    resolve();
+                });
+        });
+    };
+
+    const closeRoom = () => {
+        return new Promise<void>((resolve) => {
+            const channel = channelRef.current;
+            if (!channel) {
+                resolve();
+                return;
+            }
+            channel
+                .push('close_room', {})
+                .receive('ok', () => {
+                    channel.leave();
+                    socketRef.current?.disconnect();
+                    resolve();
+                })
+                .receive('error', () => {
+                    channel.leave();
+                    socketRef.current?.disconnect();
+                    resolve();
+                });
+        });
+    };
+
     return {
         connected,
         error,
+        leaveRoom,
+        closeRoom,
         startGame,
         requestQuestion,
         commitAnswer,

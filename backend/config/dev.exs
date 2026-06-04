@@ -8,7 +8,10 @@ config :vn_party, VnParty.Repo,
   database: "vnparty_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,
-  pool_size: 25
+  pool_size: 25,
+  queue_target: 5_000,
+  queue_interval: 1_000,
+  ownership_timeout: 120_000
 
 # For development, we disable any cache and enable
 # debugging and code reloading.

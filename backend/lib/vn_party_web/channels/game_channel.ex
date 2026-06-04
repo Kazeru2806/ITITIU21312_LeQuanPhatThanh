@@ -2,6 +2,7 @@ defmodule VnPartyWeb.GameChannel do
   use VnPartyWeb, :channel
   alias VnParty.Game
   alias VnParty.Game.Presence
+  alias VnParty.Game.DistortionRules
   alias VnParty.Game.AnswerCommit
   alias VnParty.Telemetry
   alias VnParty.Repo
@@ -78,8 +79,9 @@ defmodule VnPartyWeb.GameChannel do
     room = Game.get_room!(room_id)
     mode = Game.room_mode(room)
 
-    # Check if player is HOTR (Host of The Room)
+    Game.ensure_connected_host(room_id)
     player = Game.get_player!(player_id)
+
     unless player.is_host do
       {:reply, {:error, %{reason: "Only the host can start the game"}}, socket}
     else
@@ -117,7 +119,10 @@ defmodule VnPartyWeb.GameChannel do
           if mode == "truth_collapse" do
             cat = get_truth_active_category(room.id)
             label = if cat, do: truth_category_label(cat), else: nil
-            Map.put(game_started_payload, :truth_theme, %{category: cat, category_label: label})
+
+            game_started_payload
+            |> Map.put(:truth_theme, %{category: cat, category_label: label})
+            |> Map.put(:distortion_limits, DistortionRules.limits_for_ui())
           else
             game_started_payload
           end
@@ -327,8 +332,38 @@ defmodule VnPartyWeb.GameChannel do
         metadata: meta
       }
 
-      Task.start(fn -> Telemetry.record_latency(attrs) end)
+      Task.start(fn ->
+        try do
+          Telemetry.record_latency(attrs)
+        rescue
+          e ->
+            require Logger
+            Logger.warning("latency measurement insert failed: #{inspect(e)}")
+        end
+      end)
     end
+  end
+
+  @impl true
+  def handle_in("heartbeat", _payload, socket) do
+    Presence.mark_connected(socket.assigns.player_id)
+    {:reply, {:ok, %{server_timestamp_ms: System.system_time(:millisecond)}}, socket}
+  end
+
+  @impl true
+  def handle_in("leave_room", _payload, socket) do
+    room_code = socket.assigns.room_code
+    player_id = socket.assigns.player_id
+
+    Game.player_left(player_id, room_code)
+
+    {:stop, :normal, assign(socket, :left_voluntarily, true)}
+  end
+
+  @impl true
+  def handle_in("close_room", _payload, socket) do
+    Game.close_room_session(socket.assigns.room_id)
+    {:stop, :normal, socket}
   end
 
   @impl true
@@ -365,16 +400,28 @@ defmodule VnPartyWeb.GameChannel do
       cost = distortion_cost(action)
       stats = get_truth_stats(player_id)
 
-      if stats.charges < cost do
-        {:reply, {:error, %{reason: "Not enough distortion power"}}, socket}
-      else
+      cond do
+        stats.charges < cost ->
+          {:reply, {:error, %{reason: "Not enough distortion power"}}, socket}
+
+        not DistortionRules.can_use?(room.id, player_id, action) ->
+          {:reply, {:error, %{reason: DistortionRules.denial_reason(action)}}, socket}
+
+        true ->
         case validate_distortion_payload(action, payload, room, player_id) do
           {:error, reason} ->
             {:reply, {:error, %{reason: reason}}, socket}
 
           {:ok, cleaned_payload} ->
+            DistortionRules.record_use!(room.id, player_id, action)
             update_truth_stats(player_id, fn s -> %{s | charges: max(0, s.charges - cost), di: s.di + cost * 10} end)
             :ets.insert(:truth_distortions, {socket.assigns.room_id, room.current_round, player_id, action, cleaned_payload})
+
+            Game.create_event(room.id, "distortion_used", %{
+              action: action,
+              round: room.current_round,
+              payload: cleaned_payload
+            }, player_id)
 
             log_payload = %{
               round: room.current_round,
@@ -425,6 +472,9 @@ defmodule VnPartyWeb.GameChannel do
         cond do
           stats.charges < cost ->
             {:reply, {:error, %{reason: "Not enough distortion power"}}, socket}
+
+          not DistortionRules.can_use?(room.id, player_id, "inject_fake_option") ->
+            {:reply, {:error, %{reason: DistortionRules.denial_reason("inject_fake_option")}}, socket}
 
           :ets.lookup(:truth_fake_locks, lock_key) != [] ->
             {:reply, {:ok, %{locked: true, remaining_charges: stats.charges}}, socket}
@@ -489,8 +539,15 @@ defmodule VnPartyWeb.GameChannel do
               {:reply, {:error, %{reason: reason}}, socket}
 
             {:ok, cleaned_payload} ->
+              DistortionRules.record_use!(room.id, player_id, "inject_fake_option")
               :ets.insert(:truth_distortions, {room.id, room.current_round, player_id, "inject_fake_option", cleaned_payload})
               :ets.delete(:truth_fake_locks, lock_key)
+
+              Game.create_event(room.id, "distortion_used", %{
+                action: "inject_fake_option",
+                round: room.current_round,
+                payload: cleaned_payload
+              }, player_id)
 
               log_payload = %{
                 round: room.current_round,
@@ -1129,40 +1186,17 @@ defmodule VnPartyWeb.GameChannel do
       PubSub.unsubscribe(VnParty.PubSub, "room:#{socket.assigns.room_id}:internal")
     end
 
-    if socket.assigns[:player_id] do
+    if socket.assigns[:player_id] and socket.assigns[:room_code] and not socket.assigns[:left_voluntarily] do
       room_id = socket.assigns.room_id
       player_id = socket.assigns.player_id
       room_code = socket.assigns.room_code
+      room = Game.get_room!(room_id)
 
-      Presence.mark_disconnected(player_id)
-      Game.mark_skip_next_round(room_id, player_id)
-
-      case Game.ensure_connected_host(room_id) do
-        {:ok, new_host} when not is_nil(new_host) ->
-          host_payload = %{host_id: new_host.id, host_nickname: new_host.nickname}
-          Endpoint.broadcast("game:#{room_code}", "host_changed", host_payload)
-
-        _ ->
-          :ok
+      if room.state not in ["lobby", "game_end"] do
+        Game.mark_skip_next_round(room_id, player_id)
       end
 
-      players = Game.list_players(room_id)
-
-      disconnect_payload = %{
-        player_id: player_id,
-        nickname: socket.assigns[:nickname],
-        players: format_players(players)
-      }
-
-      broadcast_to_both(
-        socket,
-        "player_disconnected",
-        disconnect_payload,
-        "display:player_disconnected",
-        disconnect_payload
-      )
-
-      Presence.broadcast_players_sync(room_id)
+      Game.player_left(player_id, room_code)
     end
 
     maybe_register_rematch_disconnect_vote(socket)
@@ -1247,9 +1281,12 @@ defmodule VnPartyWeb.GameChannel do
       category_timeline_labels: timeline_labels
     }
 
+    phase_ends_at_ms = System.system_time(:millisecond) + discussion_seconds * 1000
+
     player_payload = %{
       round: round,
       discussion_seconds: discussion_seconds,
+      phase_ends_at_ms: phase_ends_at_ms,
       mode: "truth_collapse",
       question_id: question.id,
       category: question.category,
@@ -1258,6 +1295,8 @@ defmodule VnPartyWeb.GameChannel do
       category_timeline_labels: timeline_labels,
       options: Enum.map(question.options, & &1.id)
     }
+
+    display_payload = Map.put(display_payload, :phase_ends_at_ms, phase_ends_at_ms)
 
     broadcast_to_both(socket, "discussion_started", player_payload, "display:discussion_started", display_payload)
 
@@ -1602,6 +1641,7 @@ defmodule VnPartyWeb.GameChannel do
     :ets.delete(:truth_room_phase, room_id)
     :ets.delete(:truth_discussion_mono, room_id)
     :ets.delete(:truth_active_category, room_id)
+    DistortionRules.clear_room(room_id)
 
     Enum.each(players, fn player ->
       :ets.delete(:truth_player_stats, player.id)

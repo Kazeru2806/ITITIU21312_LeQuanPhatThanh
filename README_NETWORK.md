@@ -1,5 +1,7 @@
 # Network setup — Mac browser + Ubuntu VM
 
+**Sync code from Mac → VM:** see [README_SYNC_VM.md](README_SYNC_VM.md) or run `bash scripts/sync-to-vm.sh`.
+
 Your VM IP: **192.168.64.2**
 
 Both frontends ship with `.env.development` pointing API/WebSocket to that IP.  

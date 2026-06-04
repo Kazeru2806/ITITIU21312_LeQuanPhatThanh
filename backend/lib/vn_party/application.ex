@@ -29,6 +29,7 @@ defmodule VnParty.Application do
     :ets.new(:player_round_skip, [:set, :public, :named_table])
     :ets.new(:force_end_pending, [:set, :public, :named_table])
     :ets.new(:pending_answers, [:set, :public, :named_table])
+    :ets.new(:distortion_usage, [:set, :public, :named_table])
 
     pubsub_child =
       case System.get_env("REDIS_URL") do

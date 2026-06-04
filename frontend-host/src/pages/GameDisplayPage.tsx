@@ -177,6 +177,19 @@ export function GameDisplayPage() {
     onPlayerDisconnected: (data: any) => {
       if (data.players) setPlayers(data.players);
     },
+    onGameStarted: (data: any) => {
+      if (data.mode) setMode(data.mode);
+      setRound(data.round, data.total_rounds);
+      setGameState('round_start');
+      setRoundScores(null);
+      setCommittedPlayers(new Set());
+      setTruthReadyProgress(null);
+      if (data.mode === 'truth_collapse') {
+        setPhase('discussion');
+        setQuestion(null);
+        setLocalTimeLeft(15);
+      }
+    },
     onDiscussionStarted: (data: any) => {
       // Use event payload as source of truth (avoid stale `mode` closures)
       if (data?.mode && data.mode !== 'truth_collapse') return;
@@ -266,13 +279,18 @@ export function GameDisplayPage() {
       setGameState('game_end');
       setTimeout(() => navigate('/results'), 2000);
     },
+    onRoomClosed: () => {
+      reset();
+      navigate('/');
+    },
   };
 
-  const { requestForceEnd, confirmForceEnd, leaveDisplay } = useDisplaySocket({
+  const { requestForceEnd, confirmForceEnd, leaveDisplay, closeRoom } = useDisplaySocket({
     roomCode: roomCode || '',
     onGameState: callbacksRef.current.onGameState,
     onPlayerJoined: callbacksRef.current.onPlayerJoined,
     onPlayerDisconnected: callbacksRef.current.onPlayerDisconnected,
+    onGameStarted: callbacksRef.current.onGameStarted,
     onDiscussionStarted: callbacksRef.current.onDiscussionStarted,
     onOptionCountsUpdated: callbacksRef.current.onOptionCountsUpdated,
     onDistortionUsed: callbacksRef.current.onDistortionUsed,
@@ -282,12 +300,17 @@ export function GameDisplayPage() {
     onRoundStarted: callbacksRef.current.onRoundStarted,
     onGameEnded: callbacksRef.current.onGameEnded,
     onTruthResultsProgress: callbacksRef.current.onTruthResultsProgress,
+    onRoomClosed: callbacksRef.current.onRoomClosed,
   });
 
   if (!roomCode) return null;
 
-  const handleReturnHome = () => {
-    leaveDisplay();
+  const handleReturnHome = async () => {
+    try {
+      await closeRoom();
+    } catch {
+      leaveDisplay();
+    }
     reset();
     navigate('/');
   };

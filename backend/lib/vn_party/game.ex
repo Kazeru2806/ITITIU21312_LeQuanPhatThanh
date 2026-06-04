@@ -152,7 +152,13 @@ end
 
           {:ok, player}
 
+        {:error, _} = err ->
+          err
+
         :not_rejoin ->
+          if room.state != "lobby" do
+            {:error, :game_in_progress}
+          else
           with :ok <- VnParty.Game.Presence.make_room_for_join(room.id),
                {:ok, _} <- check_room_capacity(room),
                {:ok, player} <- create_player(room, nickname, attrs) do
@@ -162,6 +168,7 @@ end
             }, player.id)
 
             {:ok, player}
+          end
           end
       end
     end
@@ -180,16 +187,19 @@ end
 
   defp rejoin_player(room, player_id, nickname) when is_binary(player_id) do
     case Repo.get(Player, player_id) do
-      %Player{room_id: room_id} when room_id == room.id ->
-        VnParty.Game.Presence.mark_connected(player_id)
+      %Player{room_id: room_id, nickname: existing} when room_id == room.id ->
+        if String.trim(existing) != String.trim(nickname) do
+          {:error, :nickname_mismatch}
+        else
+          VnParty.Game.Presence.mark_connected(player_id)
+          player = get_player!(player_id)
 
-        player = get_player!(player_id)
-
-        case player
-             |> Player.changeset(%{nickname: nickname, connected: true})
-             |> Repo.update() do
-          {:ok, updated} -> {:ok, updated}
-          {:error, _} -> {:ok, player}
+          case player
+               |> Player.changeset(%{nickname: nickname, connected: true})
+               |> Repo.update() do
+            {:ok, updated} -> {:ok, updated}
+            {:error, _} -> {:ok, player}
+          end
         end
 
       _ ->
@@ -331,14 +341,12 @@ end
       if has_connected_host? do
         nil
       else
-        new_host =
-          Enum.find(players, & &1.connected) ||
-            List.first(players)
+        from(p in Player, where: p.room_id == ^room_id)
+        |> Repo.update_all(set: [is_host: false])
+
+        new_host = Enum.find(players, & &1.connected)
 
         if new_host do
-          from(p in Player, where: p.room_id == ^room_id and p.id != ^new_host.id and p.is_host == true)
-          |> Repo.update_all(set: [is_host: false])
-
           case new_host |> Player.make_host_changeset() |> Repo.update() do
             {:ok, host} -> host
             {:error, _} -> nil
@@ -371,18 +379,99 @@ end
   def remove_player_from_room(player_id) do
     player = get_player!(player_id)
     room_id = player.room_id
-    
+
     case Repo.delete(player) do
-      {:ok, _} ->
+      {:ok, deleted} ->
         :ets.delete(:player_absent, player_id)
         :ets.delete(:player_round_skip, player_id)
-        ensure_connected_host(room_id)
+
+        new_host =
+          case ensure_connected_host(room_id) do
+            {:ok, host} -> host
+            _ -> nil
+          end
+
         VnParty.Game.Presence.broadcast_players_sync(room_id)
-        {:ok, player}
+        {:ok, deleted, new_host}
 
       error ->
         error
     end
+  end
+
+  @doc """
+  Player left (tab closed, back button, or Return to main screen).
+  Removes them from the lobby immediately and transfers host if needed.
+  """
+  def player_left(player_id, room_code) when is_binary(player_id) do
+    case Repo.get(Player, player_id) do
+      nil ->
+        :ok
+
+      %Player{} = player ->
+        do_player_left(player, room_code)
+    end
+  end
+
+  defp do_player_left(player, room_code) do
+    player_id = player.id
+    room_id = player.room_id
+    nickname = player.nickname
+
+    case remove_player_from_room(player_id) do
+      {:ok, _deleted, new_host} ->
+        create_event(room_id, "player_left", %{player_id: player_id, nickname: nickname}, player_id)
+
+        if new_host do
+          VnPartyWeb.Endpoint.broadcast("game:#{room_code}", "host_changed", %{
+            host_id: new_host.id,
+            host_nickname: new_host.nickname
+          })
+        end
+
+        VnParty.Game.Presence.broadcast_players_sync(room_id)
+
+        players = list_players(room_id)
+
+        payload = %{
+          player_id: player_id,
+          nickname: nickname,
+          players: VnParty.Game.Presence.format_players_public(room_id, players)
+        }
+
+        VnPartyWeb.Endpoint.broadcast("game:#{room_code}", "player_left", payload)
+        VnPartyWeb.Endpoint.broadcast("display:#{room_code}", "display:player_left", payload)
+
+        {:ok, new_host}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Host display closed the room — end game and notify all clients.
+  """
+  def close_room_session(room_id) do
+    room = get_room!(room_id)
+    code = room.code
+
+    if room.state not in ["lobby", "game_end"] do
+      end_game_early(room_id)
+    end
+
+    payload = %{
+      reason: "room_closed",
+      message: "The host ended this room. Returning to the main screen.",
+      redirect_seconds: 30
+    }
+
+    VnPartyWeb.Endpoint.broadcast("game:#{code}", "room_closed", payload)
+    VnPartyWeb.Endpoint.broadcast("display:#{code}", "display:room_closed", payload)
+
+    create_event(room_id, "room_closed", %{reason: payload.reason}, nil)
+
+    {:ok, room}
   end
 
   @doc "Returns the committed answer text (DB or in-memory pending store)."

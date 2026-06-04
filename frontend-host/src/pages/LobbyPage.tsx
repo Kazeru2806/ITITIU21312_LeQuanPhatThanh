@@ -48,7 +48,7 @@ export function LobbyPage() {
     return () => window.clearInterval(id);
   }, [roomCode]);
 
-  const { connected } = useDisplaySocket({
+  const { connected, closeRoom } = useDisplaySocket({
     roomCode: roomCode || '',
     onGameState: (state) => {
       if (state.players) setPlayers(state.players);
@@ -85,6 +85,10 @@ export function LobbyPage() {
       setGameState('game_end');
       navigate('/results');
     },
+    onRoomClosed: () => {
+      reset();
+      navigate('/');
+    },
   });
 
   const handleCopyCode = async () => {
@@ -99,7 +103,12 @@ export function LobbyPage() {
     }
   };
 
-  const handleReturnHome = () => {
+  const handleReturnHome = async () => {
+    try {
+      await closeRoom();
+    } catch {
+      // still leave
+    }
     reset();
     navigate('/');
   };

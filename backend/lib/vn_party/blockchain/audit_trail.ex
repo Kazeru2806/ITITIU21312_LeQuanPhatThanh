@@ -6,10 +6,10 @@ defmodule VnParty.Blockchain.AuditTrail do
   alias VnParty.Game.BlockchainAnchor
   alias VnParty.Blockchain.EvmClient
 
-def on_event(_event) do
-  # Temporarily disabled — blockchain_anchors table schema mismatch
-  :ok
-end
+  def on_event(event) do
+    Task.start(fn -> anchor_event(event) end)
+    :ok
+  end
 
   def anchor_event(%{id: event_id, room_id: room_id, seq: seq} = event) do
     prev =

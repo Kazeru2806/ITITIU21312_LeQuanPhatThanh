@@ -95,6 +95,16 @@ defmodule VnPartyWeb.RoomController do
         conn
         |> put_status(:unprocessable_entity)
         |> json(%{success: false, error: "Room is full"})
+
+      {:error, :game_in_progress} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{success: false, error: "Game already started. Rejoin with the same device session."})
+
+      {:error, :nickname_mismatch} ->
+        conn
+        |> put_status(:unprocessable_entity)
+        |> json(%{success: false, error: "Use the same name as when you joined this game."})
       
       {:error, changeset} ->
         conn

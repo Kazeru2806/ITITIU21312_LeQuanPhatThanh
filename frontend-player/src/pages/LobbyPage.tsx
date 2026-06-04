@@ -41,7 +41,7 @@ export function LobbyPage() {
         }
     }, [storeHydrated, playerId, roomCode, nickname, navigate]);
 
-    const { connected, error, startGame } = useGameSocket({
+    const { connected, error, startGame, leaveRoom } = useGameSocket({
         roomCode: roomCode || '',
         playerId: playerId || '',
         nickname: nickname || '',
@@ -146,7 +146,12 @@ export function LobbyPage() {
         }
     };
 
-    const handleReturnMain = () => {
+    const handleReturnMain = async () => {
+        try {
+            await leaveRoom();
+        } catch {
+            // ignore
+        }
         reset();
         navigate('/');
     };

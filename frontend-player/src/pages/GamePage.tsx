@@ -35,12 +35,6 @@ export function GamePage() {
     const [resultsReadySent, setResultsReadySent] = useState(false);
     const [resultsReadyProgress, setResultsReadyProgress] = useState<{ acked: number; total: number } | null>(null);
 
-    const timeLeft = usePhaseTimer(
-        phase === 'answering' ? phaseEndsAtMs : null,
-        currentQuestion?.time_limit ?? 15
-    );
-    const discussionLeft = usePhaseTimer(phase === 'discussion' ? phaseEndsAtMs : null, 15);
-
     const {
         playerId,
         roomCode,
@@ -60,6 +54,12 @@ export function GamePage() {
         setMode,
         setGameState,
     } = useGameStore();
+
+    const timeLeft = usePhaseTimer(
+        phase === 'answering' ? phaseEndsAtMs : null,
+        currentQuestion?.time_limit ?? 15
+    );
+    const discussionLeft = usePhaseTimer(phase === 'discussion' ? phaseEndsAtMs : null, 15);
 
     // Keep the players list in sync when selecting distortions on results screen.
     useEffect(() => {
@@ -184,7 +184,7 @@ export function GamePage() {
         }
     };
 
-    const { commitAnswer, submitPrediction, useDistortion, truthResultsReady, lockFakeOption, setFakeOptionText: submitFakeOptionTextApi } = useGameSocket({
+    const { commitAnswer, submitPrediction, useDistortion, truthResultsReady, lockFakeOption, setFakeOptionText: submitFakeOptionTextApi, leaveRoom } = useGameSocket({
         roomCode: roomCode || '',
         playerId: playerId || '',
         nickname: nickname || '',
@@ -196,6 +196,9 @@ export function GamePage() {
             }
             if (state.players) {
                 useGameStore.getState().setPlayers(state.players);
+            }
+            if (state.truth_resume) {
+                applyTruthResume(state.truth_resume);
             }
         },
         onTruthResume: applyTruthResume,
@@ -295,6 +298,21 @@ export function GamePage() {
         },
         onPlayersSync: (data) => {
             if (data.players) useGameStore.getState().setPlayers(data.players as any);
+            const me = data.players?.find((p) => p.id === playerId);
+            if (me && playerId && nickname) {
+                useGameStore.getState().setPlayerInfo(playerId, nickname, me.is_host);
+            }
+        },
+        onHostChanged: (data) => {
+            const list = useGameStore.getState().players;
+            if (list.length) {
+                useGameStore.getState().setPlayers(
+                    list.map((p) => ({ ...p, is_host: p.id === data.host_id }))
+                );
+            }
+            if (playerId && nickname) {
+                useGameStore.getState().setPlayerInfo(playerId, nickname, data.host_id === playerId);
+            }
         },
         onPlayerDisconnected: (data) => {
             if (data.players?.length) useGameStore.getState().setPlayers(data.players as any);
@@ -378,7 +396,12 @@ export function GamePage() {
         }
     };
 
-    const handleReturnMain = () => {
+    const handleReturnMain = async () => {
+        try {
+            await leaveRoom();
+        } catch {
+            // still navigate home
+        }
         reset();
         navigate('/');
     };

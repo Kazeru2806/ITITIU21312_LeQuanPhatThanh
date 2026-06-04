@@ -39,6 +39,7 @@ interface UseDisplaySocketProps {
     acked_player_ids: string[];
   }) => void;
   onPlayersSync?: (data: { players: Player[]; host_id?: string | null }) => void;
+  onRoomClosed?: (data: { message?: string; redirect_seconds?: number }) => void;
 }
 
 export function useDisplaySocket({
@@ -59,6 +60,7 @@ export function useDisplaySocket({
   onRematchCancelled,
   onTruthResultsProgress,
   onPlayersSync,
+  onRoomClosed,
 }: UseDisplaySocketProps) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +85,7 @@ export function useDisplaySocket({
     onRematchCancelled,
     onTruthResultsProgress,
     onPlayersSync,
+    onRoomClosed,
   };
 
   useEffect(() => {
@@ -184,6 +187,14 @@ export function useDisplaySocket({
       cbRef.current.onPlayersSync?.(data);
     });
 
+    channel.on('display:player_left', (data) => {
+      cbRef.current.onPlayerDisconnected?.(data);
+    });
+
+    channel.on('display:room_closed', (data) => {
+      cbRef.current.onRoomClosed?.(data);
+    });
+
     return () => {
       channel.leave();
       socket.disconnect();
@@ -212,6 +223,28 @@ export function useDisplaySocket({
     });
   };
 
+  const closeRoom = () => {
+    return new Promise<void>((resolve) => {
+      const channel = channelRef.current;
+      if (!channel) {
+        resolve();
+        return;
+      }
+      channel
+        .push('close_room', {})
+        .receive('ok', () => {
+          channel.leave();
+          socketRef.current?.disconnect();
+          resolve();
+        })
+        .receive('error', () => {
+          channel.leave();
+          socketRef.current?.disconnect();
+          resolve();
+        });
+    });
+  };
+
   const leaveDisplay = () => {
     channelRef.current?.leave();
     socketRef.current?.disconnect();
@@ -224,5 +257,6 @@ export function useDisplaySocket({
     requestForceEnd,
     confirmForceEnd,
     leaveDisplay,
+    closeRoom,
   };
 }
