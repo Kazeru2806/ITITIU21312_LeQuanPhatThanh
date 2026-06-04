@@ -74,6 +74,13 @@ export function GamePage() {
         }
     }, [phase, phaseEndsAtMs]);
 
+    // Safety net: round_scored can set showResult before phase flips; never keep answering UI (120s timer).
+    useEffect(() => {
+        if (mode !== 'truth_collapse' || !showResult) return;
+        setPhase('results');
+        setQuestion(null);
+    }, [mode, showResult]);
+
     // Keep the players list in sync when selecting distortions on results screen.
     useEffect(() => {
         if (mode !== 'truth_collapse') return;
@@ -224,7 +231,7 @@ export function GamePage() {
         }
     };
 
-    const { commitAnswer, submitPrediction, useDistortion, truthResultsReady, truthDiscussionReady, lockFakeOption, setFakeOptionText: submitFakeOptionTextApi, leaveRoom, connected, error: socketError } = useGameSocket({
+    const { commitAnswer, submitPrediction, truthResultsReady, truthDiscussionReady, lockFakeOption, leaveRoom, connected, error: socketError } = useGameSocket({
         roomCode: roomCode || '',
         playerId: playerId || '',
         nickname: nickname || '',
@@ -378,10 +385,18 @@ export function GamePage() {
         },
         onRoundScored: (data) => {
             console.log('Round scored (player view):', data);
+            const scored = data as {
+                phase?: string;
+                phase_ends_at_ms?: number;
+                results_seconds?: number;
+            };
             setShowResult(true);
-            setPhase('results');
+            setPhase(scored.phase === 'results' ? 'results' : 'results');
             setQuestion(null);
-            setPhaseEndsAtMs(Date.now() + 45 * 1000);
+            setPhaseEndsAtMs(
+                scored.phase_ends_at_ms ??
+                    Date.now() + (scored.results_seconds ?? 45) * 1000
+            );
             if (data?.stats) setTruthStats(data.stats);
             setPendingDistortion(null);
             setDistortionLocked(false);
@@ -486,77 +501,62 @@ export function GamePage() {
         }
     };
 
-    const tryApplyPendingDistortion = async (): Promise<boolean> => {
-        if (!pendingDistortion || distortionLocked) return true;
+    const buildDistortionPayload = (): Record<string, unknown> | undefined => {
+        if (!pendingDistortion || distortionLocked) return undefined;
 
-        if (pendingDistortion === 'remove_option' && !distortionTarget) {
-            setDistortionToast('Choose a target player, or tap the power again to cancel.');
-            return false;
+        const distortion: Record<string, unknown> = { action: pendingDistortion };
+
+        if (pendingDistortion === 'remove_option' && distortionTarget) {
+            distortion.target_player_id = distortionTarget;
         }
-        if (pendingDistortion === 'inject_fake_option' && !fakeLockConfirmed) {
-            setDistortionToast('Tap "Yes, lock it" first, or cancel the power.');
-            return false;
-        }
-        if (pendingDistortion === 'inject_fake_option' && fakeOptionText.trim().length < 3) {
-            setDistortionToast('Type fake option text (at least 3 chars).');
-            return false;
+        if (pendingDistortion === 'inject_fake_option' && fakeOptionText.trim().length >= 3) {
+            distortion.fake_text = fakeOptionText.trim();
         }
 
-        try {
-            if (pendingDistortion === 'inject_fake_option') {
-                await submitFakeOptionTextApi(fakeOptionText);
-            } else {
-                const payload: Record<string, string> =
-                    pendingDistortion === 'remove_option' ? { target_player_id: distortionTarget } : {};
-                await useDistortion(pendingDistortion, payload);
-            }
-            setDistortionLocked(true);
-            setPendingDistortion(null);
-            setDistortionToast(null);
-            return true;
-        } catch (e) {
-            const msg =
-                e instanceof Error
-                    ? e.message
-                    : typeof e === 'object' && e !== null && 'reason' in e
-                      ? String((e as { reason: string }).reason)
-                      : 'Could not apply distortion';
-            setDistortionToast(msg);
-            return false;
-        }
+        return { distortion };
     };
 
     const handleDiscussionReady = async () => {
         if (discussionReadySent) return;
         try {
-            await truthDiscussionReady();
+            const payload = buildDistortionPayload() ?? {};
+            const res = (await truthDiscussionReady(payload)) as { distortion_note?: string };
             setDiscussionReadySent(true);
-            setDistortionToast(null);
+            if (pendingDistortion && !res?.distortion_note) {
+                setDistortionLocked(true);
+                setPendingDistortion(null);
+            }
+            if (res?.distortion_note) {
+                setDistortionToast(String(res.distortion_note));
+            } else {
+                setDistortionToast(null);
+            }
         } catch (e) {
             const msg = e instanceof Error ? e.message : 'Could not confirm — check connection.';
             setDistortionToast(msg);
             console.error('truth_discussion_ready failed', e);
-            return;
-        }
-        if (pendingDistortion && !distortionLocked) {
-            void tryApplyPendingDistortion();
         }
     };
 
     const handleTruthResultsReady = async () => {
         if (resultsReadySent) return;
         try {
-            await truthResultsReady();
+            const payload = buildDistortionPayload() ?? {};
+            const res = (await truthResultsReady(payload)) as { distortion_note?: string };
             setResultsReadySent(true);
-            setDistortionToast(null);
+            if (pendingDistortion && !res?.distortion_note) {
+                setDistortionLocked(true);
+                setPendingDistortion(null);
+            }
+            if (res?.distortion_note) {
+                setDistortionToast(String(res.distortion_note));
+            } else {
+                setDistortionToast(null);
+            }
         } catch (e) {
             const msg = e instanceof Error ? e.message : 'Could not confirm — check connection.';
             setDistortionToast(msg);
             console.error('truth_results_ready failed', e);
-            return;
-        }
-        if (pendingDistortion && !distortionLocked) {
-            void tryApplyPendingDistortion();
         }
     };
 
@@ -791,7 +791,7 @@ export function GamePage() {
         );
     }
 
-    if (mode === 'truth_collapse' && phase === 'results') {
+    if (mode === 'truth_collapse' && (phase === 'results' || showResult)) {
         return (
             <div className="min-h-screen relative overflow-hidden flex flex-col p-4 lg:p-6">
                 {roomClosed && (

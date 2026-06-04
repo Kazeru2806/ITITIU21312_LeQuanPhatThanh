@@ -569,6 +569,25 @@ defmodule VnPartyWeb.GameChannel do
       room_id = room.id
       round = room.current_round
       player_id = socket.assigns.player_id
+      phase = current_truth_phase(room_id) || "results"
+
+      distortion_note =
+        case payload do
+          %{"distortion" => %{"action" => action} = d} when is_binary(action) ->
+            case apply_distortion_for_player(socket, room, phase, action, d) do
+              :ok -> nil
+              {:error, reason} -> reason
+            end
+
+          _ ->
+            nil
+        end
+
+      record_truth_results_ready(socket, room_id, round, player_id, distortion_note)
+    end
+  end
+
+  defp record_truth_results_ready(socket, _room, room_id, round, player_id, distortion_note \\ nil) do
       :ets.insert(:truth_results_ack, {{room_id, round, player_id}, true})
 
       players = Game.list_players(room_id)
@@ -596,7 +615,89 @@ defmodule VnPartyWeb.GameChannel do
         PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:auto_advance_round, room_id, round})
       end
 
-      {:reply, {:ok, %{received: true}}, socket}
+      {:reply, {:ok, %{received: true, distortion_note: distortion_note}}, socket}
+  end
+
+  defp apply_distortion_for_player(socket, room, phase, action, dist_payload) do
+    player_id = socket.assigns.player_id
+    room_id = room.id
+
+    cond do
+      phase not in ["discussion", "results"] ->
+        {:error, "Distortions can only be used during discussion or results"}
+
+      action == "inject_fake_option" ->
+        fake_text = Map.get(dist_payload, "fake_text", "")
+
+        lock_key =
+          {room.id, distortion_effect_round(room, phase), player_id}
+
+        if :ets.lookup(:truth_fake_locks, lock_key) == [] do
+          {:error, "You must lock the fake-option power first"}
+        else
+          case validate_distortion_payload("inject_fake_option", %{"fake_text" => fake_text}, room, player_id) do
+            {:error, reason} -> {:error, reason}
+            {:ok, cleaned} -> store_distortion_use(socket, room, phase, player_id, "inject_fake_option", cleaned, lock_key)
+          end
+        end
+
+      true ->
+        case validate_distortion_payload(action, dist_payload, room, player_id) do
+          {:error, reason} -> {:error, reason}
+          {:ok, cleaned} -> store_distortion_use(socket, room, phase, player_id, action, cleaned, nil)
+        end
+    end
+  end
+
+  defp store_distortion_use(socket, room, phase, player_id, action, cleaned_payload, lock_key) do
+    cost = distortion_cost(action)
+    stats = get_truth_stats(player_id)
+
+    cond do
+      stats.charges < cost ->
+        {:error, "Not enough distortion power"}
+
+      not DistortionRules.can_use?(room.id, player_id, action) ->
+        {:error, DistortionRules.denial_reason(action)}
+
+      true ->
+        effect_round = distortion_effect_round(room, phase)
+
+        DistortionRules.record_use!(room.id, player_id, action)
+        update_truth_stats(player_id, fn s -> %{s | charges: max(0, s.charges - cost), di: s.di + cost * 10} end)
+        :ets.insert(:truth_distortions, {room.id, effect_round, player_id, action, cleaned_payload})
+
+        if lock_key do
+          :ets.delete(:truth_fake_locks, lock_key)
+        end
+
+        Game.create_event(room.id, "distortion_used", %{
+          action: action,
+          round: effect_round,
+          payload: cleaned_payload
+        }, player_id)
+
+        log_payload = %{
+          round: effect_round,
+          player_id: player_id,
+          nickname: socket.assigns.nickname,
+          action: action,
+          payload: cleaned_payload,
+          remaining_charges: get_truth_stats(player_id).charges
+        }
+
+        broadcast_to_both(socket, "distortion_used", log_payload, "display:distortion_used", log_payload)
+
+        players_now = Game.list_players(room.id)
+
+        stats_public =
+          Enum.map(players_now, fn p ->
+            s = get_truth_stats(p.id)
+            %{player_id: p.id, tp: s.tp, di: s.di, ps: s.ps, charges: s.charges}
+          end)
+
+        broadcast!(socket, "truth_stats_updated", %{stats: stats_public})
+        :ok
     end
   end
 
@@ -617,40 +718,52 @@ defmodule VnPartyWeb.GameChannel do
       if phase != "discussion" do
         {:reply, {:error, %{reason: "Not in discussion phase"}}, socket}
       else
+        distortion_note =
+          case payload do
+            %{"distortion" => %{"action" => action} = d} when is_binary(action) ->
+              case apply_distortion_for_player(socket, room, phase, action, d) do
+                :ok -> nil
+                {:error, reason} -> reason
+              end
+
+            _ ->
+              nil
+          end
+
         :ets.insert(:truth_discussion_ack, {{room_id, round, player_id}, true})
 
-        players = Game.list_players(room_id)
-        connected = Enum.filter(players, & &1.connected)
+            players = Game.list_players(room_id)
+            connected = Enum.filter(players, & &1.connected)
 
-        acked_ids =
-          Enum.filter(connected, fn p ->
-            case :ets.lookup(:truth_discussion_ack, {room_id, round, p.id}) do
-              [_] -> true
-              [] -> false
+            acked_ids =
+              Enum.filter(connected, fn p ->
+                case :ets.lookup(:truth_discussion_ack, {room_id, round, p.id}) do
+                  [_] -> true
+                  [] -> false
+                end
+              end)
+              |> Enum.map(& &1.id)
+
+            progress = %{
+              round: round,
+              acked_count: length(acked_ids),
+              total: length(connected),
+              acked_player_ids: acked_ids
+            }
+
+            broadcast_to_both(
+              socket,
+              "truth_discussion_progress",
+              progress,
+              "display:truth_discussion_progress",
+              progress
+            )
+
+            if length(connected) > 0 and length(acked_ids) >= length(connected) do
+              PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:truth_begin_answering, room_id, round})
             end
-          end)
-          |> Enum.map(& &1.id)
 
-        progress = %{
-          round: round,
-          acked_count: length(acked_ids),
-          total: length(connected),
-          acked_player_ids: acked_ids
-        }
-
-        broadcast_to_both(
-          socket,
-          "truth_discussion_progress",
-          progress,
-          "display:truth_discussion_progress",
-          progress
-        )
-
-        if length(connected) > 0 and length(acked_ids) >= length(connected) do
-          PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:truth_begin_answering, room_id, round})
-        end
-
-        {:reply, {:ok, %{received: true}}, socket}
+            {:reply, {:ok, %{received: true, distortion_note: distortion_note}}, socket}
       end
     end
   end
@@ -1293,6 +1406,8 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   @results_phase_seconds 45
+  @min_questions_per_category 8
+  @min_truth_options 9
 
   # Discussion distortions apply to the current round; results-screen distortions apply to the next round.
   defp distortion_effect_round(room, "discussion"), do: room.current_round
@@ -1846,7 +1961,8 @@ defmodule VnPartyWeb.GameChannel do
   defp resize_truth_options_for_players(%{injected_option_ids: ids} = q, _) when is_list(ids) and ids != [], do: q
 
   defp resize_truth_options_for_players(%{options: options} = q, connected_n) do
-    want = max(min(connected_n + 1, length(options)), 2)
+    want = max(min(connected_n + 1, length(options)), min(length(options), 4))
+    want = min(want, @min_truth_options)
     correct_ids = if is_list(q.correct), do: q.correct, else: [q.correct]
     kept_correct = Enum.filter(options, fn o -> o.id in correct_ids end)
     wrongs = Enum.reject(options, fn o -> o.id in correct_ids end)
@@ -1860,7 +1976,7 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   defp ensure_truth_question_option_capacity(%{options: options} = q, want) do
-    want = max(want, 4)
+    want = max(want, @min_truth_options)
 
     if length(options) >= want do
       q
@@ -2542,7 +2658,16 @@ defmodule VnPartyWeb.GameChannel do
         %{player_id: p.id, tp: s.tp, di: s.di, ps: s.ps, charges: s.charges}
       end)
 
-    player_payload = %{round: round, mode: "truth_collapse", stats: stats_public}
+    results_ends_at = System.system_time(:millisecond) + @results_phase_seconds * 1000
+
+    player_payload = %{
+      round: round,
+      mode: "truth_collapse",
+      stats: stats_public,
+      phase: "results",
+      phase_ends_at_ms: results_ends_at,
+      results_seconds: @results_phase_seconds
+    }
 
     :ets.insert(:truth_room_phase, {room_id, %{round: round, phase: "results"}})
 
@@ -2698,73 +2823,104 @@ defmodule VnPartyWeb.GameChannel do
 
     next_used = Enum.take((used_ids ++ [selected.id]) |> Enum.uniq(), length(questions))
     :ets.insert(:truth_question_history, {history_key, next_used})
-    selected
+    ensure_question_min_options(selected, category)
   end
 
+  defp ensure_question_min_options(q, category) do
+    cat = category || Map.get(q, :category) || "general"
+    opts = Map.get(q, :options, [])
+
+    if length(opts) >= @min_truth_options do
+      q
+    else
+      existing_texts =
+        opts
+        |> Enum.map(&String.downcase(String.trim(&1.text)))
+        |> MapSet.new()
+
+      extras =
+        category_distractor_texts(cat, q.text, @min_truth_options)
+        |> Enum.reject(fn t -> MapSet.member?(existing_texts, String.downcase(t)) end)
+        |> Enum.take(@min_truth_options - length(opts))
+
+      used_ids = Enum.map(opts, & &1.id)
+
+      new_opts =
+        Enum.reduce(extras, {opts, used_ids}, fn text, {acc, ids} ->
+          nid = next_option_id(ids)
+          {[%{id: nid, text: text} | acc], ids ++ [nid]}
+        end)
+        |> elem(0)
+        |> Enum.reverse()
+        |> Enum.sort_by(& &1.id)
+
+      %{q | options: new_opts}
+    end
+  end
+
+  defp category_distractor_texts(cat, question_text, count) do
+    base = category_base_distractors(cat)
+
+    themed =
+      case question_text do
+        t when is_binary(t) and t != "" ->
+          words =
+            t
+            |> String.replace(~r/[^\w\s]/u, "")
+            |> String.split(~r/\s+/, trim: true)
+            |> Enum.filter(&(String.length(&1) > 3))
+            |> Enum.take(3)
+
+          Enum.map(1..count, fn i ->
+            hint = Enum.at(words, rem(i, max(length(words), 1))) || "related"
+            "Unlikely: #{hint} (variant #{i})"
+          end)
+
+        _ ->
+          []
+      end
+
+    (base ++ themed) |> Enum.uniq() |> Enum.take(count)
+  end
+
+  defp category_base_distractors("general"),
+    do: ["None of the above", "All of the above", "Not applicable", "Unknown", "Depends on context", "Cannot be determined", "Only in theory", "Only in practice", "Both A and C"]
+
+  defp category_base_distractors("science_lite"),
+    do: ["Helium", "Neon", "Argon", "Krypton", "Xenon", "Radon", "Plasma", "Vacuum", "Absolute zero"]
+
+  defp category_base_distractors("geography"),
+    do: ["Andes", "Himalayas", "Sahara", "Gobi", "Arctic Ocean", "Mediterranean", "Equator", "Prime meridian", "Tropic of Cancer"]
+
+  defp category_base_distractors("history"),
+    do: ["1914", "1918", "1939", "1941", "1969", "1776", "1066", "1492", "2001"]
+
+  defp category_base_distractors("technology"),
+    do: ["FTP", "SMTP", "DNS", "TCP", "UDP", "HTML", "CSS", "JSON", "XML"]
+
+  defp category_base_distractors("food_culture"),
+    do: ["Sushi", "Tacos", "Curry", "Baguette", "Pizza", "Ramen", "Tapas", "BBQ", "Salad"]
+
+  defp category_base_distractors("sports_lite"),
+    do: ["Cricket", "Rugby", "Golf", "Boxing", "Swimming", "Cycling", "Skiing", "Volleyball", "Handball"]
+
+  defp category_base_distractors("pop_culture"),
+    do: ["Marvel", "DC", "Anime", "K-pop", "Broadway", "Netflix", "Podcast", "Meme", "Viral trend"]
+
+  defp category_base_distractors("social_stats"),
+    do: ["Mean", "Median", "Mode", "Sample bias", "Control group", "Correlation", "Causation", "Outlier", "Confidence interval"]
+
+  defp category_base_distractors("weird_facts"),
+    do: ["Myth", "Urban legend", "Old wives' tale", "Hoax", "Superstition", "Folk belief", "Rumor", "Clickbait", "Debunked"]
+
+  defp category_base_distractors(_),
+    do: category_base_distractors("general")
+
   defp truth_question_pools do
-    %{
-      "general" => [
-        %{id: "tg1", text: "Which country consumes the most coffee per capita?", options: [%{id: "A", text: "Finland"}, %{id: "B", text: "USA"}, %{id: "C", text: "Brazil"}, %{id: "D", text: "Japan"}], correct: "A"},
-        %{id: "tg2", text: "How many hearts does an octopus have?", options: [%{id: "A", text: "1"}, %{id: "B", text: "2"}, %{id: "C", text: "3"}, %{id: "D", text: "4"}], correct: "C"},
-        %{id: "tg3", text: "What is the smallest prime number?", options: [%{id: "A", text: "0"}, %{id: "B", text: "1"}, %{id: "C", text: "2"}, %{id: "D", text: "3"}], correct: "C"},
-        %{id: "tg4", text: "Which planet is known as the Red Planet?", options: [%{id: "A", text: "Venus"}, %{id: "B", text: "Mars"}, %{id: "C", text: "Jupiter"}, %{id: "D", text: "Saturn"}], correct: "B"},
-        %{id: "tg5", text: "How many continents are there on Earth (standard model)?", options: [%{id: "A", text: "5"}, %{id: "B", text: "6"}, %{id: "C", text: "7"}, %{id: "D", text: "8"}], correct: "C"},
-        %{id: "tg6", text: "Which gas makes up most of Earth's atmosphere?", options: [%{id: "A", text: "Oxygen"}, %{id: "B", text: "Nitrogen"}, %{id: "C", text: "Carbon Dioxide"}, %{id: "D", text: "Argon"}], correct: "B"},
-        %{id: "tg7", text: "What is the chemical symbol for gold?", options: [%{id: "A", text: "Go"}, %{id: "B", text: "Gd"}, %{id: "C", text: "Au"}, %{id: "D", text: "Ag"}], correct: "C"},
-        %{id: "tg8", text: "Which ocean is the largest by surface area?", options: [%{id: "A", text: "Atlantic"}, %{id: "B", text: "Indian"}, %{id: "C", text: "Arctic"}, %{id: "D", text: "Pacific"}], correct: "D"}
-      ],
-      "weird_facts" => [
-        %{id: "tw1", text: "Roughly what percentage of people sleep with socks on?", options: [%{id: "A", text: "10%"}, %{id: "B", text: "20%"}, %{id: "C", text: "30%"}, %{id: "D", text: "50%"}], correct: "C"},
-        %{id: "tw2", text: "Honey never spoils because it is highly acidic and low in moisture.", options: [%{id: "A", text: "Myth"}, %{id: "B", text: "True"}, %{id: "C", text: "Only in cold climates"}, %{id: "D", text: "Only pasteurized honey"}], correct: "B"},
-        %{id: "tw3", text: "A group of flamingos is called a …", options: [%{id: "A", text: "Parliament"}, %{id: "B", text: "Flamboyance"}, %{id: "C", text: "Convocation"}, %{id: "D", text: "Huddle"}], correct: "B"}
-      ],
-      "social_stats" => [
-        %{id: "ts1", text: "Most used social app globally by breadth of users?", options: [%{id: "A", text: "TikTok"}, %{id: "B", text: "Instagram"}, %{id: "C", text: "YouTube"}, %{id: "D", text: "Facebook"}], correct: "D"},
-        %{id: "ts2", text: "Which age group reports the most daily screen time on average (typical surveys)?", options: [%{id: "A", text: "13–17"}, %{id: "B", text: "18–24"}, %{id: "C", text: "35–44"}, %{id: "D", text: "65+"}], correct: "B"},
-        %{id: "ts3", text: "What is the approximate world literacy rate for adults?", options: [%{id: "A", text: "55%"}, %{id: "B", text: "70%"}, %{id: "C", text: "86%"}, %{id: "D", text: "95%"}], correct: "C"},
-        %{id: "ts4", text: "Roughly what share of the world uses the internet (ITU estimate)?", options: [%{id: "A", text: "40%"}, %{id: "B", text: "55%"}, %{id: "C", text: "67%"}, %{id: "D", text: "90%"}], correct: "C"},
-        %{id: "ts5", text: "Which metric is commonly used to measure audience engagement on posts?", options: [%{id: "A", text: "Latency"}, %{id: "B", text: "Engagement rate"}, %{id: "C", text: "Bandwidth"}, %{id: "D", text: "Uptime"}], correct: "B"},
-        %{id: "ts6", text: "A/B testing in product teams is primarily used to…", options: [%{id: "A", text: "Compare two variants"}, %{id: "B", text: "Delete user data"}, %{id: "C", text: "Encrypt passwords"}, %{id: "D", text: "Ship hardware"}], correct: "A"},
-        %{id: "ts7", text: "Net Promoter Score (NPS) measures…", options: [%{id: "A", text: "Likelihood to recommend"}, %{id: "B", text: "CPU temperature"}, %{id: "C", text: "Packet loss"}, %{id: "D", text: "Screen resolution"}], correct: "A"},
-        %{id: "ts8", text: "In surveys, a Likert scale typically asks respondents to…", options: [%{id: "A", text: "Rate agreement on a scale"}, %{id: "B", text: "Draw a map"}, %{id: "C", text: "Measure weight"}, %{id: "D", text: "Record heart rate"}], correct: "A"}
-      ],
-      "science_lite" => [
-        %{id: "tc1", text: "What gas do plants primarily absorb for photosynthesis?", options: [%{id: "A", text: "Oxygen"}, %{id: "B", text: "Nitrogen"}, %{id: "C", text: "Carbon Dioxide"}, %{id: "D", text: "Helium"}], correct: "C"},
-        %{id: "tc2", text: "Speed of light in vacuum is approximately?", options: [%{id: "A", text: "300 km/s"}, %{id: "B", text: "3,000 km/s"}, %{id: "C", text: "300,000 km/s"}, %{id: "D", text: "3 million km/s"}], correct: "C"},
-        %{id: "tc3", text: "Water boils at 100°C at standard sea-level pressure.", options: [%{id: "A", text: "False"}, %{id: "B", text: "True"}, %{id: "C", text: "Only for salt water"}, %{id: "D", text: "Only above sea level"}], correct: "B"}
-      ],
-      "pop_culture" => [
-        %{id: "tp1", text: "Which franchise features 'Jedi'?", options: [%{id: "A", text: "Star Wars"}, %{id: "B", text: "Star Trek"}, %{id: "C", text: "Dune"}, %{id: "D", text: "Avatar"}], correct: "A"},
-        %{id: "tp2", text: "Who wrote the novel '1984'?", options: [%{id: "A", text: "Huxley"}, %{id: "B", text: "Orwell"}, %{id: "C", text: "Bradbury"}, %{id: "D", text: "Atwood"}], correct: "B"},
-        %{id: "tp3", text: "Pac-Man is a character from which era of gaming?", options: [%{id: "A", text: "1970s arcade"}, %{id: "B", text: "1990s PC"}, %{id: "C", text: "2000s mobile"}, %{id: "D", text: "2010s VR"}], correct: "A"}
-      ],
-      "history" => [
-        %{id: "th1", text: "World War II ended in Europe in which year?", options: [%{id: "A", text: "1943"}, %{id: "B", text: "1944"}, %{id: "C", text: "1945"}, %{id: "D", text: "1946"}], correct: "C"},
-        %{id: "th2", text: "The Berlin Wall fell in which year?", options: [%{id: "A", text: "1987"}, %{id: "B", text: "1989"}, %{id: "C", text: "1991"}, %{id: "D", text: "1993"}], correct: "B"},
-        %{id: "th3", text: "Ancient Olympic Games originated in?", options: [%{id: "A", text: "Rome"}, %{id: "B", text: "Greece"}, %{id: "C", text: "Egypt"}, %{id: "D", text: "Persia"}], correct: "B"}
-      ],
-      "geography" => [
-        %{id: "tgeo1", text: "What is the longest river in the world (common geographic claim)?", options: [%{id: "A", text: "Amazon"}, %{id: "B", text: "Nile"}, %{id: "C", text: "Yangtze"}, %{id: "D", text: "Mississippi"}], correct: "B"},
-        %{id: "tgeo2", text: "Mount Everest lies on the border of Nepal and which country?", options: [%{id: "A", text: "India"}, %{id: "B", text: "China"}, %{id: "C", text: "Bhutan"}, %{id: "D", text: "Pakistan"}], correct: "B"},
-        %{id: "tgeo3", text: "Which is the smallest continent?", options: [%{id: "A", text: "Europe"}, %{id: "B", text: "Australia"}, %{id: "C", text: "Antarctica"}, %{id: "D", text: "South America"}], correct: "B"}
-      ],
-      "food_culture" => [
-        %{id: "tf1", text: "Traditional Japanese fermented soybeans are called?", options: [%{id: "A", text: "Miso"}, %{id: "B", text: "Natto"}, %{id: "C", text: "Tempeh"}, %{id: "D", text: "Kimchi"}], correct: "B"},
-        %{id: "tf2", text: "Which country is the largest producer of coffee beans?", options: [%{id: "A", text: "Vietnam"}, %{id: "B", text: "Colombia"}, %{id: "C", text: "Brazil"}, %{id: "D", text: "Ethiopia"}], correct: "C"},
-        %{id: "tf3", text: "Pho is most associated with the cuisine of?", options: [%{id: "A", text: "Thailand"}, %{id: "B", text: "Vietnam"}, %{id: "C", text: "China"}, %{id: "D", text: "Japan"}], correct: "B"}
-      ],
-      "sports_lite" => [
-        %{id: "tsp1", text: "How many players per team are on the court in basketball?", options: [%{id: "A", text: "4"}, %{id: "B", text: "5"}, %{id: "C", text: "6"}, %{id: "D", text: "7"}], correct: "B"},
-        %{id: "tsp2", text: "The FIFA World Cup is held every …", options: [%{id: "A", text: "2 years"}, %{id: "B", text: "3 years"}, %{id: "C", text: "4 years"}, %{id: "D", text: "5 years"}], correct: "C"},
-        %{id: "tsp3", text: "Tennis scores use 'love' to mean …", options: [%{id: "A", text: "Advantage"}, %{id: "B", text: "Deuce"}, %{id: "C", text: "Zero"}, %{id: "D", text: "Match point"}], correct: "C"}
-      ],
-      "technology" => [
-        %{id: "tt1", text: "HTTP stands for …", options: [%{id: "A", text: "HyperText Transfer Protocol"}, %{id: "B", text: "High Transfer Text Process"}, %{id: "C", text: "Hosted Text Transmission Packet"}, %{id: "D", text: "Hybrid Terminal Transport Program"}], correct: "A"},
-        %{id: "tt2", text: "Which company created the Linux kernel?", options: [%{id: "A", text: "Torvalds (personal project)"}, %{id: "B", text: "Microsoft"}, %{id: "C", text: "IBM"}, %{id: "D", text: "Apple"}], correct: "A"},
-        %{id: "tt3", text: "What does CPU stand for?", options: [%{id: "A", text: "Central Processing Unit"}, %{id: "B", text: "Computer Personal Utility"}, %{id: "C", text: "Core Program Utility"}, %{id: "D", text: "Cached Processing Upper bus"}], correct: "A"}
-      ]
-    }
-    |> ensure_min_questions_per_category(8)
+    VnParty.TruthQuestionBank.pools()
+    |> ensure_min_questions_per_category(@min_questions_per_category)
+    |> Enum.map(fn {cat, qs} -> {cat, Enum.map(qs, &ensure_question_min_options(&1, cat))} end)
+    |> Enum.into(%{})
   end
 
   defp ensure_min_questions_per_category(pools, min_n) do
@@ -2775,51 +2931,72 @@ defmodule VnPartyWeb.GameChannel do
         Enum.map(1..missing, fn i ->
           n = length(qs) + i
           {prompt, choices} = generated_truth_prompt_and_choices(cat, n)
-          correct = "A"
+
+          letters = Enum.map(0..(@min_truth_options - 1), fn j -> <<?A + j>> end)
+
+          options =
+            Enum.zip(letters, choices ++ category_distractor_texts(cat, prompt, @min_truth_options))
+            |> Enum.take(@min_truth_options)
+            |> Enum.map(fn {id, text} -> %{id: id, text: text} end)
+
           %{
             id: "#{cat}_gen_#{n}",
             text: prompt,
-            options: [
-              %{id: "A", text: Enum.at(choices, 0)},
-              %{id: "B", text: Enum.at(choices, 1)},
-              %{id: "C", text: Enum.at(choices, 2)},
-              %{id: "D", text: Enum.at(choices, 3)}
-            ],
-            correct: correct
+            options: options,
+            correct: "A"
           }
         end)
 
-      {cat, qs ++ generated}
+      {cat, Enum.map(qs ++ generated, &ensure_question_min_options(&1, cat))}
     end)
   end
 
   defp next_option_id(existing_ids) do
-    letters = 0..25 |> Enum.map(fn i -> <<?A + i>> end)
+    letters = 0..(@min_truth_options + 5) |> Enum.map(fn i -> <<?A + i>> end)
     Enum.find(letters, fn l -> l not in existing_ids end) || "Z#{System.unique_integer([:positive])}"
   end
 
   defp generated_truth_prompt_and_choices(cat, _n) do
     case cat do
       "technology" ->
-        {"Which term is directly related to computing?", ["Database", "Palm Tree", "Waterfall", "Volcano"]}
+        {"Which term is directly related to computing?",
+         ["Database", "Compiler", "Kernel", "API", "Cache", "Router", "Firewall", "Protocol", "Algorithm"]}
+
       "geography" ->
-        {"Which place is a country?", ["Peru", "Sahara", "Amazon", "Alps"]}
+        {"Which place is a country?",
+         ["Peru", "Chile", "Ecuador", "Bolivia", "Paraguay", "Uruguay", "Colombia", "Venezuela", "Guyana"]}
+
       "history" ->
-        {"Which item is a historical era?", ["Renaissance", "Microwave Age", "Plastic Era", "Wi-Fi Era"]}
+        {"Which item is a historical era?",
+         ["Renaissance", "Enlightenment", "Industrial Age", "Bronze Age", "Iron Age", "Medieval", "Victorian", "Cold War", "Ancient Rome"]}
+
       "sports_lite" ->
-        {"Which of these is an Olympic sport?", ["Archery", "Chessboxing", "Esports", "Tag"]}
+        {"Which of these is an Olympic sport?",
+         ["Archery", "Fencing", "Judo", "Rowing", "Diving", "Boxing", "Cycling", "Swimming", "Athletics"]}
+
       "food_culture" ->
-        {"Which is a fermented food?", ["Kimchi", "Marshmallow", "Ketchup", "Granola Bar"]}
+        {"Which is a fermented food?",
+         ["Kimchi", "Sauerkraut", "Yogurt", "Miso", "Tempeh", "Kefir", "Pickles", "Natto", "Kombucha"]}
+
       "pop_culture" ->
-        {"Which is a film genre?", ["Science Fiction", "Spreadsheet", "Blueprint", "Algorithm"]}
+        {"Which is a film genre?",
+         ["Science Fiction", "Horror", "Comedy", "Drama", "Romance", "Thriller", "Documentary", "Animation", "Western"]}
+
       "science_lite" ->
-        {"Which is a planet in our solar system?", ["Mercury", "Polaris", "Orion", "Andromeda"]}
+        {"Which is a planet in our solar system?",
+         ["Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto (dwarf)"]}
+
       "social_stats" ->
-        {"Which is a common social network?", ["Instagram", "PowerPoint", "Excel", "Photoshop"]}
+        {"Which is a common social network?",
+         ["Instagram", "Facebook", "TikTok", "YouTube", "LinkedIn", "Snapchat", "Twitter/X", "Reddit", "Pinterest"]}
+
       "weird_facts" ->
-        {"Which animal can regenerate lost limbs?", ["Starfish", "Panda", "Penguin", "Camel"]}
+        {"Which animal can regenerate lost limbs?",
+         ["Starfish", "Salamander", "Planaria", "Crab", "Lizard tail", "Sea cucumber", "Sponge", "Hydra", "Axolotl"]}
+
       _ ->
-        {"Which answer is most likely correct?", ["Option A", "Option B", "Option C", "Option D"]}
+        {"Which answer is most likely correct?",
+         ["Option A", "Option B", "Option C", "Option D", "Option E", "Option F", "Option G", "Option H", "Option I"]}
     end
   end
 

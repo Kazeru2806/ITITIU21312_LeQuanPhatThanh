@@ -473,9 +473,11 @@ export function useGameSocket({
         });
     };
 
-    const truthResultsReady = () => pushAsync('truth_results_ready', {});
+    const truthResultsReady = (payload: Record<string, unknown> = {}) =>
+        pushAsync('truth_results_ready', payload);
 
-    const truthDiscussionReady = () => pushAsync('truth_discussion_ready', {});
+    const truthDiscussionReady = (payload: Record<string, unknown> = {}) =>
+        pushAsync('truth_discussion_ready', payload);
 
     const leaveRoom = () => {
         return new Promise<void>((resolve) => {

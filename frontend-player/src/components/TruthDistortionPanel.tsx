@@ -15,6 +15,7 @@ interface TruthDistortionPanelProps {
   readySent: boolean;
   readyProgress: { acked: number; total: number } | null;
   doneLabel: string;
+  doneLabelWithPower?: string;
   onToggleDistortion: (action: DistortionAction) => void;
   onSetDistortionTarget: (id: string) => void;
   onSetFakeOptionText: (text: string) => void;
@@ -35,6 +36,7 @@ export function TruthDistortionPanel({
   readySent,
   readyProgress,
   doneLabel,
+  doneLabelWithPower = 'Confirm power & ready',
   onToggleDistortion,
   onSetDistortionTarget,
   onSetFakeOptionText,
@@ -165,13 +167,24 @@ export function TruthDistortionPanel({
         <button
           type="button"
           disabled={readySent}
-          onClick={onDone}
-          className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg"
+          onPointerDown={(e) => {
+            if (readySent) return;
+            e.preventDefault();
+            onDone();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+          }}
+          className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg touch-manipulation"
         >
-          {readySent ? 'Waiting for other players…' : doneLabel}
+          {readySent
+            ? 'Waiting for other players…'
+            : pendingDistortion && !distortionLocked
+              ? doneLabelWithPower
+              : doneLabel}
         </button>
         <p className="text-xs text-gray-600 mt-2 text-center">
-          Optional: spend a distortion, then tap Done. Everyone ready skips the wait early.
+          Tap Done anytime. If you picked a power, Done confirms it and marks you ready. Everyone ready skips the wait.
         </p>
       </div>
     </div>
