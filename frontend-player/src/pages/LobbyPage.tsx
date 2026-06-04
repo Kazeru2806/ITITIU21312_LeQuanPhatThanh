@@ -41,6 +41,28 @@ export function LobbyPage() {
         }
     }, [storeHydrated, playerId, roomCode, nickname, navigate]);
 
+    useEffect(() => {
+        if (!roomCode) return;
+        let cancelled = false;
+        const poll = async () => {
+            try {
+                const res = await api.getRoom(roomCode);
+                if (!cancelled && res.success && res.room?.state === 'game_end') {
+                    reset();
+                    navigate('/');
+                }
+            } catch {
+                // ignore
+            }
+        };
+        poll();
+        const id = window.setInterval(poll, 2500);
+        return () => {
+            cancelled = true;
+            window.clearInterval(id);
+        };
+    }, [roomCode, navigate, reset]);
+
     const { connected, error, startGame, leaveRoom } = useGameSocket({
         roomCode: roomCode || '',
         playerId: playerId || '',
@@ -106,6 +128,12 @@ export function LobbyPage() {
             reset();
             navigate('/');
         },
+        onGameEnded: (data: { room_closed?: boolean; forced?: boolean }) => {
+            if (data?.room_closed || data?.forced) {
+                reset();
+                navigate('/');
+            }
+        },
         onHostChanged: (data) => {
             const list = useGameStore.getState().players;
             if (list.length) {
@@ -147,14 +175,6 @@ export function LobbyPage() {
     };
 
     const handleReturnMain = async () => {
-        const code = useGameStore.getState().roomCode;
-        if (code) {
-            try {
-                await api.closeRoom(code);
-            } catch {
-                // ignore
-            }
-        }
         try {
             await leaveRoom();
         } catch {

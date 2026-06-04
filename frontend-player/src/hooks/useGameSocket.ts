@@ -81,8 +81,11 @@ interface RoundStartedData {
 }
 
 interface GameEndedData {
-    final_scores: LeaderboardEntry[];
+    final_scores?: LeaderboardEntry[];
     winner?: LeaderboardEntry;
+    message?: string;
+    forced?: boolean;
+    room_closed?: boolean;
 }
 
 interface UseGameSocketProps {
@@ -345,12 +348,37 @@ export function useGameSocket({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [roomCode, playerId, nickname]);
 
-    // Helper functions to send messages
+    const phoenixError = (err: { reason?: string }) =>
+        new Error(err?.reason || 'Request failed');
+
     const pushWithTimestamp = (event: string, payload: Record<string, any> = {}) => {
         const channel = channelRef.current;
-        if (!channel) return null;
+        if (!channel) {
+            return {
+                receive: () => ({
+                    receive: (_status: string, _cb: unknown) => ({
+                        receive: () => ({
+                            receive: () => ({}),
+                        }),
+                    }),
+                }),
+            };
+        }
         return channel.push(event, { ...payload, client_timestamp_ms: Date.now() });
     };
+
+    const pushAsync = (event: string, payload: Record<string, any> = {}) =>
+        new Promise((resolve, reject) => {
+            const channel = channelRef.current;
+            if (!channel) {
+                reject(new Error('Not connected to game server'));
+                return;
+            }
+            channel
+                .push(event, { ...payload, client_timestamp_ms: Date.now() })
+                .receive('ok', resolve)
+                .receive('error', (err: { reason?: string }) => reject(phoenixError(err)));
+        });
 
     const startGame = () => {
         return new Promise((resolve, reject) => {
@@ -384,13 +412,8 @@ export function useGameSocket({
         });
     };
 
-    const useDistortion = (action: string, payload: Record<string, any> = {}) => {
-        return new Promise((resolve, reject) => {
-            pushWithTimestamp('use_distortion', { action, ...payload })
-                .receive('ok', resolve)
-                .receive('error', reject);
-        });
-    };
+    const useDistortion = (action: string, payload: Record<string, any> = {}) =>
+        pushAsync('use_distortion', { action, ...payload });
 
     const lockFakeOption = () => {
         return new Promise((resolve, reject) => {
@@ -400,13 +423,8 @@ export function useGameSocket({
         });
     };
 
-    const setFakeOptionText = (fakeText: string) => {
-        return new Promise((resolve, reject) => {
-            pushWithTimestamp('set_fake_option_text', { fake_text: fakeText })
-                .receive('ok', resolve)
-                .receive('error', reject);
-        });
-    };
+    const setFakeOptionText = (fakeText: string) =>
+        pushAsync('set_fake_option_text', { fake_text: fakeText });
 
     const getState = () => {
         return new Promise((resolve, reject) => {
@@ -448,21 +466,9 @@ export function useGameSocket({
         });
     };
 
-    const truthResultsReady = () => {
-        return new Promise((resolve, reject) => {
-            pushWithTimestamp('truth_results_ready', {})
-                .receive('ok', resolve)
-                .receive('error', reject);
-        });
-    };
+    const truthResultsReady = () => pushAsync('truth_results_ready', {});
 
-    const truthDiscussionReady = () => {
-        return new Promise((resolve, reject) => {
-            pushWithTimestamp('truth_discussion_ready', {})
-                .receive('ok', resolve)
-                .receive('error', reject);
-        });
-    };
+    const truthDiscussionReady = () => pushAsync('truth_discussion_ready', {});
 
     const leaveRoom = () => {
         return new Promise<void>((resolve) => {

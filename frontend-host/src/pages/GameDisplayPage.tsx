@@ -42,6 +42,13 @@ export function GameDisplayPage() {
   const [discussionEndsAtMs, setDiscussionEndsAtMs] = useState<number | null>(null);
   const discussionLeft = usePhaseTimer(phase === 'discussion' ? discussionEndsAtMs : null, 15);
   const isTruth = mode === 'truth_collapse';
+
+  useEffect(() => {
+    if (mode !== 'truth_collapse' || phase !== 'discussion') return;
+    if (!discussionEndsAtMs) {
+      setDiscussionEndsAtMs(Date.now() + (localTimeLeft || 15) * 1000);
+    }
+  }, [mode, phase, discussionEndsAtMs, localTimeLeft]);
   const reset = useDisplayStore((s) => s.reset);
   const [forceEndStep, setForceEndStep] = useState<'idle' | 'confirm'>('idle');
   const [forceEndCode, setForceEndCode] = useState('');
@@ -126,7 +133,11 @@ export function GameDisplayPage() {
           setQuestion(null);
           setRoundScores(null);
           setTruthMeta(null);
-          setLocalTimeLeft(tr.discussion_seconds ?? 15);
+          const secs = tr.discussion_seconds ?? 15;
+          setLocalTimeLeft(secs);
+          setDiscussionEndsAtMs(
+            tr.phase_ends_at_ms ?? Date.now() + secs * 1000
+          );
           setTruthDiscussionMeta({
             categoryLabel: tr.category_label,
             timelineLabels: tr.category_timeline_labels ?? [],
@@ -193,6 +204,7 @@ export function GameDisplayPage() {
         setPhase('discussion');
         setQuestion(null);
         setLocalTimeLeft(15);
+        setDiscussionEndsAtMs(Date.now() + 15 * 1000);
       }
     },
     onDiscussionStarted: (data: any) => {
@@ -275,9 +287,11 @@ export function GameDisplayPage() {
             timelineLabels: data.category_timeline_labels ?? [],
           });
         }
-        if (data.discussion_seconds != null) {
-          setLocalTimeLeft(data.discussion_seconds);
-        }
+        const secs = data.discussion_seconds ?? 15;
+        setLocalTimeLeft(secs);
+        setDiscussionEndsAtMs(
+          (data as { phase_ends_at_ms?: number }).phase_ends_at_ms ?? Date.now() + secs * 1000
+        );
       }
     },
     onTruthResultsProgress: (data: any) => {

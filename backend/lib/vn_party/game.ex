@@ -476,6 +476,12 @@ end
     VnPartyWeb.Endpoint.broadcast("game:#{code}", "room_closed", payload)
     VnPartyWeb.Endpoint.broadcast("display:#{code}", "display:room_closed", payload)
 
+    VnPartyWeb.Endpoint.broadcast("game:#{code}", "game_ended", %{
+      message: payload.message,
+      forced: true,
+      room_closed: true
+    })
+
     create_event(room_id, "room_closed", %{reason: payload.reason}, nil)
 
     {:ok, room}

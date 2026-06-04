@@ -64,6 +64,12 @@ export function GamePage() {
     );
     const discussionLeft = usePhaseTimer(phase === 'discussion' ? phaseEndsAtMs : null, 15);
 
+    useEffect(() => {
+        if (phase === 'discussion' && !phaseEndsAtMs) {
+            setPhaseEndsAtMs(Date.now() + 15 * 1000);
+        }
+    }, [phase, phaseEndsAtMs]);
+
     // Keep the players list in sync when selecting distortions on results screen.
     useEffect(() => {
         if (mode !== 'truth_collapse') return;
@@ -104,6 +110,29 @@ export function GamePage() {
             navigate('/');
         }
     }, [storeHydrated, playerId, roomCode, nickname, navigate]);
+
+    // Fallback if WebSocket room_closed was missed (mobile sleep / reconnect).
+    useEffect(() => {
+        if (!roomCode) return;
+        let cancelled = false;
+        const poll = async () => {
+            try {
+                const res = await api.getRoom(roomCode);
+                if (!cancelled && res.success && res.room?.state === 'game_end') {
+                    reset();
+                    navigate('/');
+                }
+            } catch {
+                // ignore
+            }
+        };
+        poll();
+        const id = window.setInterval(poll, 2500);
+        return () => {
+            cancelled = true;
+            window.clearInterval(id);
+        };
+    }, [roomCode, navigate, reset]);
 
     const applyTruthResume = (resume: TruthResume) => {
         if (resume.phase === 'transition') {
@@ -329,9 +358,15 @@ export function GamePage() {
         onPlayerDisconnected: (data) => {
             if (data.players?.length) useGameStore.getState().setPlayers(data.players as any);
         },
-        onRoomClosed: () => {
-            reset();
-            navigate('/');
+        onRoomClosed: (data) => {
+            setRoomClosed({
+                message: data?.message ?? 'The host ended this room.',
+                redirect_seconds: data?.redirect_seconds ?? 3,
+            });
+            window.setTimeout(() => {
+                reset();
+                navigate('/');
+            }, (data?.redirect_seconds ?? 3) * 1000);
         },
         onRoundScored: (data) => {
             console.log('Round scored (player view):', data);
@@ -385,12 +420,13 @@ export function GamePage() {
         onTruthStatsUpdated: (data) => {
             if (data?.stats) setTruthStats(data.stats);
         },
-        onGameEnded: () => {
-            console.log('🎉 Game ended! Navigating to results...');
-            // Small delay to let players see final scores
-            setTimeout(() => {
-                navigate('/results');
-            }, 2000);
+        onGameEnded: (data: { room_closed?: boolean; forced?: boolean; message?: string }) => {
+            if (data?.room_closed || data?.forced) {
+                reset();
+                navigate('/');
+                return;
+            }
+            setTimeout(() => navigate('/results'), 2000);
         },
     });
 
@@ -413,14 +449,6 @@ export function GamePage() {
     };
 
     const handleReturnMain = async () => {
-        const code = useGameStore.getState().roomCode;
-        if (code) {
-            try {
-                await api.closeRoom(code);
-            } catch {
-                // ignore
-            }
-        }
         try {
             await leaveRoom();
         } catch {
@@ -442,49 +470,74 @@ export function GamePage() {
         }
     };
 
-    const submitPendingDistortion = async () => {
-        if (!pendingDistortion || distortionLocked) return;
+    const tryApplyPendingDistortion = async (): Promise<boolean> => {
+        if (!pendingDistortion || distortionLocked) return true;
+
         if (pendingDistortion === 'remove_option' && !distortionTarget) {
-            setDistortionToast('Choose a target player for Remove option.');
-            return;
+            setDistortionToast('Choose a target player, or tap the power again to cancel.');
+            return false;
         }
         if (pendingDistortion === 'inject_fake_option' && !fakeLockConfirmed) {
-            setDistortionToast('Confirm fake-option lock first.');
-            return;
+            setDistortionToast('Tap "Yes, lock it" first, or cancel the power.');
+            return false;
         }
         if (pendingDistortion === 'inject_fake_option' && fakeOptionText.trim().length < 3) {
             setDistortionToast('Type fake option text (at least 3 chars).');
-            return;
+            return false;
         }
-        if (pendingDistortion === 'inject_fake_option') {
-            await submitFakeOptionTextApi(fakeOptionText);
-        } else {
-            const payload: Record<string, string> =
-                pendingDistortion === 'remove_option' ? { target_player_id: distortionTarget } : {};
-            await useDistortion(pendingDistortion, payload);
+
+        try {
+            if (pendingDistortion === 'inject_fake_option') {
+                await submitFakeOptionTextApi(fakeOptionText);
+            } else {
+                const payload: Record<string, string> =
+                    pendingDistortion === 'remove_option' ? { target_player_id: distortionTarget } : {};
+                await useDistortion(pendingDistortion, payload);
+            }
+            setDistortionLocked(true);
+            setPendingDistortion(null);
+            setDistortionToast(null);
+            return true;
+        } catch (e) {
+            const msg =
+                e instanceof Error
+                    ? e.message
+                    : typeof e === 'object' && e !== null && 'reason' in e
+                      ? String((e as { reason: string }).reason)
+                      : 'Could not apply distortion';
+            setDistortionToast(msg);
+            return false;
         }
-        setDistortionLocked(true);
-        setDistortionToast(null);
     };
 
     const handleDiscussionReady = async () => {
+        if (discussionReadySent) return;
+        if (pendingDistortion && !distortionLocked) {
+            await tryApplyPendingDistortion();
+        }
         try {
-            await submitPendingDistortion();
             await truthDiscussionReady();
             setDiscussionReadySent(true);
+            setDistortionToast(null);
         } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Could not confirm — check connection.';
+            setDistortionToast(msg);
             console.error('truth_discussion_ready failed', e);
-            setDistortionToast(e instanceof Error ? e.message : 'Could not confirm — try again.');
         }
     };
 
     const handleTruthResultsReady = async () => {
+        if (resultsReadySent) return;
+        if (pendingDistortion && !distortionLocked) {
+            await tryApplyPendingDistortion();
+        }
         try {
-            await submitPendingDistortion();
-
             await truthResultsReady();
             setResultsReadySent(true);
+            setDistortionToast(null);
         } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Could not confirm — check connection.';
+            setDistortionToast(msg);
             console.error('truth_results_ready failed', e);
         }
     };
@@ -713,6 +766,62 @@ export function GamePage() {
                             onSetFakeOptionText={setFakeOptionText}
                             onConfirmFakeLock={handleConfirmFakeLock}
                             onDone={handleDiscussionReady}
+                        />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (mode === 'truth_collapse' && phase === 'results') {
+        return (
+            <div className="min-h-screen relative overflow-hidden flex flex-col p-4 lg:p-6">
+                {roomClosed && (
+                    <RoomClosedBanner
+                        message={roomClosed.message}
+                        redirectSeconds={roomClosed.redirect_seconds}
+                    />
+                )}
+                <div className="flex items-center mb-6 relative z-10 gap-4">
+                    <div className="bg-white/90 backdrop-blur-sm px-6 py-3 rounded-full text-purple-700 font-black text-lg border-2 border-purple-200">
+                        Round {currentRound}/{totalRounds}
+                    </div>
+                    <div className="bg-white/90 backdrop-blur-sm px-6 py-3 rounded-full text-pink-700 font-black text-lg border-2 border-pink-200 mx-auto">
+                        {nickname}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleReturnMain}
+                        className="px-4 py-2 rounded-xl border-2 border-purple-200 bg-white text-purple-700 font-bold hover:bg-purple-50"
+                    >
+                        Return to main screen
+                    </button>
+                </div>
+                <div className="flex-1 flex items-center justify-center relative z-10">
+                    <div className="w-full max-w-lg">
+                        <div className="text-center mb-6 p-6 rounded-xl border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50">
+                            <PhoThePhoenix className="w-24 h-28 mx-auto drop-shadow-lg mb-3" />
+                            <p className="text-2xl font-black text-purple-700">Round results</p>
+                            <p className="text-gray-700 font-semibold mt-2">Look at the host screen for scores</p>
+                        </div>
+                        <TruthDistortionPanel
+                            myCharges={myCharges}
+                            players={players}
+                            pendingDistortion={pendingDistortion}
+                            distortionTarget={distortionTarget}
+                            distortionLocked={distortionLocked}
+                            distortionToast={distortionToast}
+                            fakeLockConfirmed={fakeLockConfirmed}
+                            fakeOptionText={fakeOptionText}
+                            fakePreview={fakePreview}
+                            readySent={resultsReadySent}
+                            readyProgress={resultsReadyProgress}
+                            doneLabel="Done — ready for next round"
+                            onToggleDistortion={handleToggleDistortion}
+                            onSetDistortionTarget={setDistortionTarget}
+                            onSetFakeOptionText={setFakeOptionText}
+                            onConfirmFakeLock={handleConfirmFakeLock}
+                            onDone={handleTruthResultsReady}
                         />
                     </div>
                 </div>
@@ -964,147 +1073,6 @@ export function GamePage() {
                                 </div>
                             )}
 
-                            {mode === 'truth_collapse' && phase === 'results' && (
-                                <div className="mt-6 p-6 rounded-xl border-2 border-purple-200 bg-white">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <p className="text-xl font-black text-purple-700">Distortion Power</p>
-                                        <p className="text-xl font-black text-pink-700">{myCharges} charges</p>
-                                    </div>
-                                        {distortionToast && (
-                                            <div className="mb-4 p-3 rounded-lg border border-purple-200 bg-purple-50 text-purple-800 font-semibold">
-                                                {distortionToast}
-                                            </div>
-                                        )}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button
-                                            onClick={() => handleToggleDistortion('remove_option')}
-                                            disabled={myCharges < 2}
-                                            className={`py-3 rounded-xl border-2 font-bold disabled:opacity-50 ${pendingDistortion === 'remove_option' ? 'bg-purple-600 text-white border-purple-600' : ''}`}
-                                        >
-                                            Remove one option from target (2)
-                                        </button>
-                                        <button
-                                            onClick={() => handleToggleDistortion('swap_category')}
-                                            disabled={myCharges < 2}
-                                            className={`py-3 rounded-xl border-2 font-bold disabled:opacity-50 ${pendingDistortion === 'swap_category' ? 'bg-purple-600 text-white border-purple-600' : ''}`}
-                                        >
-                                            Swap category (2)
-                                        </button>
-                                        <button
-                                            onClick={() => handleToggleDistortion('force_blind')}
-                                            disabled={myCharges < 3}
-                                            className={`py-3 rounded-xl border-2 font-bold disabled:opacity-50 ${pendingDistortion === 'force_blind' ? 'bg-purple-600 text-white border-purple-600' : ''}`}
-                                        >
-                                            Shuffle answers (3)
-                                        </button>
-                                        <button
-                                            onClick={() => handleToggleDistortion('inject_fake_option')}
-                                            disabled={myCharges < 4}
-                                            className={`py-3 rounded-xl border-2 font-bold disabled:opacity-50 ${pendingDistortion === 'inject_fake_option' ? 'bg-purple-600 text-white border-purple-600' : ''}`}
-                                        >
-                                            Inject custom fake option (4)
-                                        </button>
-                                    </div>
-                                    {pendingDistortion === 'remove_option' && (
-                                        <div className="mt-4 p-3 rounded-xl border border-purple-200 bg-purple-50/70">
-                                            <p className="text-sm font-bold text-purple-800 mb-2">Choose target player</p>
-                                            <div className="grid grid-cols-1 gap-3">
-                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                                                    {players
-                                                        .slice()
-                                                        .sort((a, b) => a.nickname.localeCompare(b.nickname))
-                                                        .map((p) => (
-                                                            <button
-                                                                key={p.id}
-                                                                type="button"
-                                                                onClick={() => setDistortionTarget(p.id)}
-                                                                className={`rounded-lg px-3 py-2 border-2 text-sm font-bold ${
-                                                                    distortionTarget === p.id
-                                                                        ? 'bg-purple-600 text-white border-purple-600'
-                                                                        : 'bg-white text-purple-800 border-purple-200'
-                                                                }`}
-                                                            >
-                                                                {p.nickname}
-                                                            </button>
-                                                        ))}
-                                                </div>
-                                                {distortionTarget ? (
-                                                    <p className="text-sm font-semibold text-purple-800">
-                                                        Selected: {players.find((p) => p.id === distortionTarget)?.nickname || 'Unknown'}
-                                                    </p>
-                                                ) : null}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {pendingDistortion === 'inject_fake_option' && (
-                                        <div className="mt-4 p-3 rounded-xl border border-purple-200 bg-purple-50/70">
-                                            {!fakeLockConfirmed ? (
-                                                <div className="space-y-3">
-                                                    <p className="text-sm text-purple-800 font-semibold">
-                                                        Confirm lock? This reveals the next question preview and cannot be undone.
-                                                    </p>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        <button
-                                                            type="button"
-                                                            onClick={handleConfirmFakeLock}
-                                                            className="rounded-xl px-4 py-3 font-black bg-gradient-to-r from-purple-600 to-pink-500 text-white"
-                                                        >
-                                                            Yes, lock it
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleToggleDistortion('inject_fake_option')}
-                                                            className="rounded-xl px-4 py-3 font-black bg-white border-2 border-purple-200 text-purple-700"
-                                                        >
-                                                            No, cancel
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="space-y-3">
-                                                    <div className="rounded-lg border border-purple-200 bg-white p-3">
-                                                        <p className="text-xs uppercase tracking-wide font-bold text-purple-700">Next question preview</p>
-                                                        <p className="font-black text-purple-900">{fakePreview?.category_label}</p>
-                                                        <p className="text-sm text-gray-700 mt-1">{fakePreview?.text}</p>
-                                                    </div>
-                                                    <input
-                                                        value={fakeOptionText}
-                                                        onChange={(e) => setFakeOptionText(e.target.value)}
-                                                        maxLength={60}
-                                                        placeholder="Type fake answer text (safe language only)"
-                                                        className="w-full rounded-xl border-2 border-purple-200 bg-white px-3 py-3 font-semibold text-purple-900"
-                                                    />
-                                                    <p className="text-xs text-gray-600">
-                                                        This locked power is submitted when you press Done.
-                                                    </p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    <p className="text-sm text-gray-600 mt-3">Use distortions before the next round starts.</p>
-
-                                    <div className="mt-6 p-4 rounded-xl border border-purple-200 bg-purple-50/90">
-                                        {resultsReadyProgress ? (
-                                            <p className="text-center font-bold text-purple-800 mb-3">
-                                                Ready: {resultsReadyProgress.acked}/{resultsReadyProgress.total}
-                                            </p>
-                                        ) : null}
-                                        <button
-                                            type="button"
-                                            disabled={resultsReadySent}
-                                            onClick={handleTruthResultsReady}
-                                            className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg"
-                                        >
-                                            {resultsReadySent ? 'Waiting for other players…' : 'Done — ready for next round'}
-                                        </button>
-                                        <p className="text-xs text-gray-600 mt-2 text-center">
-                                            Optional: spend distortions above, then confirm when you are finished. The
-                                            round continues early when everyone taps this.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         {/* Auto-advance message */}
