@@ -100,9 +100,21 @@ Redeploy the backend after changing CORS/check_origin.
 3. Confirm WebSocket connects (no “failed to join” in browser console).
 4. Start a game from the player who has the **Host** badge.
 
+## Step 6 — Hypothesis tests on production
+
+| Hypothesis | Doc | Target |
+|------------|-----|--------|
+| H1 Latency | [README_H1_ACADEMIC_TEST.md](README_H1_ACADEMIC_TEST.md) | Render API + WSS |
+| H2 Scalability | [README_H2_LOADTEST.md](README_H2_LOADTEST.md) | Render + `REDIS_URL` (not localhost) |
+| H3 Security | [README_H3_COMMIT_REVEAL.md](README_H3_COMMIT_REVEAL.md) | Mix tests + `/api/rooms/:code/audit` on Render |
+
+Set on **Render** (backend):
+
+- `ALLOWED_ORIGINS` = comma-separated Vercel URLs if you add new preview domains
+
 ---
 
-## Local / LAN testing (unchanged)
+## Local / LAN testing (optional)
 
 See [README_NETWORK.md](README_NETWORK.md) for `192.168.64.2` VM setup. Vercel is for internet-facing demos; LAN uses `.env.development` in each frontend.
 

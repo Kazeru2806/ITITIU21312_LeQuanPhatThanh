@@ -39,8 +39,8 @@ async function run() {
   };
 
   const host = getArg("--host", "127.0.0.1");
-  const apiBase = `http://${host}:4000/api`;
-  const wsUrl = `ws://${host}:4000/socket`;
+  const apiBase = getArg("--api", `http://${host}:4000/api`).replace(/\/+$/, "");
+  const wsUrl = getArg("--ws", `ws://${host}:4000/socket`).replace(/\/websocket$/, "");
 
   const players = Number(getArg("--players", "8"));
   const messagesPerPlayer = Number(getArg("--messages", "100"));

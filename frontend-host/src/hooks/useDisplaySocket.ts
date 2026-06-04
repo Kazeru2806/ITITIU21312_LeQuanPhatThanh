@@ -230,18 +230,19 @@ export function useDisplaySocket({
         resolve();
         return;
       }
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        channel.leave();
+        socketRef.current?.disconnect();
+        resolve();
+      };
+      window.setTimeout(finish, 3000);
       channel
         .push('close_room', {})
-        .receive('ok', () => {
-          channel.leave();
-          socketRef.current?.disconnect();
-          resolve();
-        })
-        .receive('error', () => {
-          channel.leave();
-          socketRef.current?.disconnect();
-          resolve();
-        });
+        .receive('ok', finish)
+        .receive('error', finish);
     });
   };
 

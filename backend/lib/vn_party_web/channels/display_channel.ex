@@ -34,7 +34,7 @@ defmodule VnPartyWeb.DisplayChannel do
   @impl true
   def handle_in("close_room", _payload, socket) do
     Game.close_room_session(socket.assigns.room_id)
-    {:stop, :normal, socket}
+    {:stop, :normal, assign(socket, :room_closed_intentionally, true)}
   end
 
   @impl true
@@ -98,10 +98,8 @@ defmodule VnPartyWeb.DisplayChannel do
 
   @impl true
   def terminate(_reason, socket) do
-    if socket.assigns[:room_id] do
-      Game.close_room_session(socket.assigns.room_id)
-    end
-
+    # Room is closed only via explicit `close_room` push — not when the host TV
+    # navigates lobby → game (which remounts the WebSocket).
     :ok
   end
 

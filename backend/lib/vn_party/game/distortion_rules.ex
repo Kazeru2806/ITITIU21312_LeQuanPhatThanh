@@ -9,15 +9,17 @@ defmodule VnParty.Game.DistortionRules do
   @max_remove_per_player 1
   @max_remove_total 3
   @max_swap_per_player 2
+  @max_swap_per_room 4
   @max_force_blind_per_player 1
+  @max_force_blind_per_room 3
   @max_fake_per_player 1
   @max_merge_per_game 1
 
   def limits_for_ui do
     %{
       remove_option: %{per_player: @max_remove_per_player, per_game_total: @max_remove_total},
-      swap_category: %{per_player: @max_swap_per_player},
-      force_blind: %{per_player: @max_force_blind_per_player},
+      swap_category: %{per_player: @max_swap_per_player, per_game_total: @max_swap_per_room},
+      force_blind: %{per_player: @max_force_blind_per_player, per_game_total: @max_force_blind_per_room},
       inject_fake_option: %{per_player: @max_fake_per_player},
       merge_realities: %{per_game_total: @max_merge_per_game}
     }
@@ -30,10 +32,12 @@ defmodule VnParty.Game.DistortionRules do
           total_uses(room_id, action) < @max_remove_total
 
       "swap_category" ->
-        player_uses(room_id, player_id, action) < @max_swap_per_player
+        player_uses(room_id, player_id, action) < @max_swap_per_player and
+          total_uses(room_id, action) < @max_swap_per_room
 
       "force_blind" ->
-        player_uses(room_id, player_id, action) < @max_force_blind_per_player
+        player_uses(room_id, player_id, action) < @max_force_blind_per_player and
+          total_uses(room_id, action) < @max_force_blind_per_room
 
       "inject_fake_option" ->
         player_uses(room_id, player_id, action) < @max_fake_per_player
@@ -52,8 +56,9 @@ defmodule VnParty.Game.DistortionRules do
     :ok
   end
 
-  def clear_room(room_id) do
-    :ets.match_delete(:distortion_usage, {{^room_id, :_, :_}, :_})
+  def clear_room(room_id) when is_binary(room_id) do
+    :ets.match_delete(:distortion_usage, {room_id, :_, :_})
+    :ets.match_delete(:distortion_usage, {room_id, :total, :_})
     :ok
   end
 
@@ -73,6 +78,14 @@ defmodule VnParty.Game.DistortionRules do
 
   def denial_reason("remove_option") do
     "Remove option limit reached (max #{@max_remove_per_player} per player, #{@max_remove_total} per game for the room)"
+  end
+
+  def denial_reason("swap_category") do
+    "Swap category limit reached (max #{@max_swap_per_player} per player, #{@max_swap_per_room} per room per game)"
+  end
+
+  def denial_reason("force_blind") do
+    "Force blind limit reached (max #{@max_force_blind_per_player} per player, #{@max_force_blind_per_room} per room per game)"
   end
 
   def denial_reason(action), do: "Distortion limit reached for #{action}"

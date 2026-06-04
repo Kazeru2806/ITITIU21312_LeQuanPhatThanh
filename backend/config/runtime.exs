@@ -57,6 +57,13 @@ if config_env() == :prod do
 
   config :vn_party, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  extra_origins =
+    case System.get_env("ALLOWED_ORIGINS") do
+      nil -> []
+      "" -> []
+      csv -> csv |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+    end
+
   config :vn_party, VnPartyWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
     http: [
@@ -67,7 +74,7 @@ if config_env() == :prod do
       "https://vn-party-thesis.vercel.app",
       "https://vn-party-thesis-host.vercel.app",
       "https://vn-party-thesis-host-2bjn9x6y1-kazs-projects-a81dd6d8.vercel.app"
-    ]
+    ] ++ extra_origins,
 
   # ## SSL Support
   #

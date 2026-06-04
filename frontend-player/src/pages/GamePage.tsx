@@ -184,7 +184,7 @@ export function GamePage() {
         }
     };
 
-    const { commitAnswer, submitPrediction, useDistortion, truthResultsReady, lockFakeOption, setFakeOptionText: submitFakeOptionTextApi, leaveRoom } = useGameSocket({
+    const { commitAnswer, submitPrediction, useDistortion, truthResultsReady, lockFakeOption, setFakeOptionText: submitFakeOptionTextApi, leaveRoom, connected, error: socketError } = useGameSocket({
         roomCode: roomCode || '',
         playerId: playerId || '',
         nickname: nickname || '',
@@ -210,17 +210,9 @@ export function GamePage() {
             setShowResult(false);
             setHasCommitted(false);
             setSelectedAnswer(null);
-            setPhase('discussion');
-            setResultsReadySent(false);
-            setResultsReadyProgress(null);
-            setPendingDistortion(null);
-            setDistortionLocked(false);
-            setDistortionTarget('');
-            setFakeOptionText('');
-            setFakeLockConfirmed(false);
-            setFakePreview(null);
             if (data.mode === 'truth_collapse') {
                 setPhaseEndsAtMs(Date.now() + 15 * 1000);
+                setPhase('discussion');
                 if (data.truth_theme?.category_label) {
                     setDiscussionMeta({
                         categoryLabel: data.truth_theme.category_label,
@@ -235,8 +227,17 @@ export function GamePage() {
                     });
                 }
             } else {
+                setPhase('answering');
                 setDiscussionMeta(null);
             }
+            setResultsReadySent(false);
+            setResultsReadyProgress(null);
+            setPendingDistortion(null);
+            setDistortionLocked(false);
+            setDistortionTarget('');
+            setFakeOptionText('');
+            setFakeLockConfirmed(false);
+            setFakePreview(null);
         },
         onDiscussionStarted: (data) => {
             if (data.mode) setMode(data.mode as any);
@@ -317,11 +318,9 @@ export function GamePage() {
         onPlayerDisconnected: (data) => {
             if (data.players?.length) useGameStore.getState().setPlayers(data.players as any);
         },
-        onRoomClosed: (data) => {
-            setRoomClosed({
-                message: data.message || 'The host screen closed. This room has ended.',
-                redirect_seconds: data.redirect_seconds ?? 30,
-            });
+        onRoomClosed: () => {
+            reset();
+            navigate('/');
         },
         onRoundScored: (data) => {
             console.log('Round scored (player view):', data);
@@ -504,7 +503,34 @@ export function GamePage() {
     }
 
     if (!playerId || !roomCode) {
-        return null;
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6">
+                <p className="text-purple-800 font-bold text-lg mb-4">Session lost — rejoin from the home screen.</p>
+                <button
+                    type="button"
+                    onClick={() => navigate('/')}
+                    className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold"
+                >
+                    Go home
+                </button>
+            </div>
+        );
+    }
+
+    if (socketError && !connected) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6">
+                <p className="text-red-700 font-bold text-lg mb-2">Could not connect to the game</p>
+                <p className="text-gray-600 mb-4 text-center max-w-md">{socketError}</p>
+                <button
+                    type="button"
+                    onClick={() => navigate('/lobby')}
+                    className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold"
+                >
+                    Back to lobby
+                </button>
+            </div>
+        );
     }
 
     const predictOptions =

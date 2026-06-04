@@ -2,40 +2,46 @@
 
 ## Host and lobby
 
-- First player in an empty room becomes **host** (can start the game from their phone).
-- If the host **closes the tab**, presses **Return to main screen**, or disconnects, they are **removed from the lobby immediately** and host passes to another **connected** player.
-- **Return to main screen** on the **host TV** ends the room for everyone (`room_closed`).
+- First player in an empty room becomes **host** (can start from their phone).
+- Closing the tab or **Return to main screen** removes that player immediately; host badge passes to another connected player.
+- **Return to main screen** on the **host TV** sends `room_closed` to every player and ends the session.
 
-## Distortion power (answered for committee)
+## Distortion powers — full limits
 
-**Remove option** (“delete answer”): removes wrong options from a **target player’s** view next round.
+All limits are enforced **server-side** (`DistortionRules`). Each use also writes `game_events` + blockchain anchor.
 
-**Maximum per game session (this build):**
+| Power | Cost (charges) | Per player / game | Per room / game | Notes |
+|-------|----------------|-------------------|-----------------|-------|
+| **Remove option** | 2 | **1** | **3** total | Cannot target yourself; removes wrong options from target’s view next round |
+| **Swap category** | 2 | **2** | **4** total | Changes category theme for next round |
+| **Force blind** | 3 | **1** | **3** total | Shuffles answer order for target; cannot target yourself |
+| **Inject fake option** | 4 | **1** | — | Two-step: lock → enter text (max 60 chars, safety filter) |
+| **Merge realities** | 4 | — | **1** total | No effect on final round; merges scoring realities once per game |
 
-| Distortion | Per player (per game) | Whole room (per game) |
-|------------|----------------------|------------------------|
-| Remove option | **1** | **3** total |
-| Swap category | 2 | — |
-| Force blind | 1 | — |
-| Inject fake option | 1 | — |
-| Merge realities | — | **1** total |
+### Committee answer: “How many deletes per session?”
 
-So the teacher’s question “how many deletes can occur in one session?” → **at most 3 remove-option effects in the entire room**, and **each player may use remove option at most once**.
+**Remove option** = delete answer: **at most 3 times in the entire room per game**, and **each player may use it at most once**.
 
-Charges still cost distortion power (2 charges for remove option, etc.). Limits are enforced server-side; events are written to the **event log** and **blockchain anchor chain** when enabled.
+### Why room-wide caps?
+
+Without room caps, 8 players could each spam swap/blind and break game flow. Room caps keep distortions **tactical**, not chaotic.
+
+## Charges (distortion power)
+
+- Players earn charges from Truth Collapse scoring (wrong-guess rewards, etc.).
+- Server rejects use if `charges < cost` or limits exceeded.
 
 ## Mid-game join
 
-- **Lobby:** anyone with a name can join until the host starts.
-- **After start:** only **reconnect** with the same `player_id` (stored in browser session). New names / strangers are rejected.
+- **Lobby:** open until host starts.
+- **After start:** only reconnect with same `player_id` (sessionStorage). New strangers rejected (`game_in_progress`).
 
 ## Disconnect
 
-- Close tab / leave room → **immediate removal** from lobby (no 30s / 75s wait).
-- Brief tab switch with game tab still open → **heartbeat** keeps the WebSocket alive.
+- Tab closed / network drop → removed from roster (abnormal WebSocket close).
+- In-app navigation (lobby → game) → **not** treated as leave (same player reconnects channel).
+- Tab still open → heartbeat every 10s keeps connection alive.
 
-## Blockchain (H3)
+## Blockchain
 
-Each `player_joined`, `player_left`, `distortion_used`, `player_rejoined`, `room_closed`, etc. creates a `game_events` row. `AuditTrail.on_event/1` appends a **hash chain** in `blockchain_anchors` (and optionally anchors on-chain if `EVM` is configured).
-
-Room audit API: `GET /api/rooms/:code/audit`
+`GET /api/rooms/:code/audit` — hash chain over game events. See `README_H3_COMMIT_REVEAL.md` and `README_SECURITY_ANSWER_COMMITS.md`.

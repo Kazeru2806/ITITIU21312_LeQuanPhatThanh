@@ -16,8 +16,6 @@ defmodule VnPartyWeb.GameChannel do
         {:error, %{reason: "Room not found"}}
 
       room ->
-        # Assign room and player info to socket
-        # Use room.code from DB for consistent broadcasting (handles case mismatch)
         socket =
           socket
           |> assign(:room_id, room.id)
@@ -25,40 +23,20 @@ defmodule VnPartyWeb.GameChannel do
           |> assign(:player_id, player_id)
           |> assign(:nickname, nickname)
 
-        Presence.mark_connected(player_id)
+        case Game.get_player(player_id) do
+          %VnParty.Game.Player{room_id: rid} when rid == room.id ->
+            Presence.mark_connected(player_id)
 
-        # Subscribe to room's internal topic so we can receive timer events
-        # (ensures timer fires even if the player who started the game disconnects)
-        PubSub.subscribe(VnParty.PubSub, "room:#{room.id}:internal")
+            PubSub.subscribe(VnParty.PubSub, "room:#{room.id}:internal")
+            send(self(), :after_join)
 
-        # Schedule broadcast to happen after join completes
-        send(self(), :after_join)
+            game_state = get_game_state(room)
+            response = build_join_response(room, game_state)
+            {:ok, response, socket}
 
-        # If game is in progress, send current question options only (no text)
-        game_state = get_game_state(room)
-        response =
-          if room.state == "round_start" and room.current_round > 0 do
-            # IMPORTANT:
-            # - Classic mode: we can provide a lightweight current_question on join.
-            # - Truth Collapse: do NOT inject a classic mock question here (it breaks timers/UX).
-            if Game.room_mode(room) == "truth_collapse" do
-              game_state
-            else
-              question = generate_mock_question(room.current_round)
-              IO.puts("📤 Sending current question options to new joiner for round #{room.current_round}")
-              player_question = %{
-                id: question.id,
-                options: ["A", "B", "C", "D"],
-                time_limit: question.time_limit
-              }
-              Map.put(game_state, :current_question, player_question)
-            end
-          else
-            game_state
-          end
-
-        # Send current game state to the joining player (with question if game in progress)
-        {:ok, response, socket}
+          _ ->
+            {:error, %{reason: "Player not in this room. Join again from the home screen."}}
+        end
     end
   end
 
@@ -1181,12 +1159,13 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   @impl true
-  def terminate(_reason, socket) do
+  def terminate(reason, socket) do
     if socket.assigns[:room_id] do
       PubSub.unsubscribe(VnParty.PubSub, "room:#{socket.assigns.room_id}:internal")
     end
 
-    if socket.assigns[:player_id] and socket.assigns[:room_code] and not socket.assigns[:left_voluntarily] do
+    if socket.assigns[:player_id] and socket.assigns[:room_code] and
+         should_remove_player_on_disconnect?(reason, socket) do
       room_id = socket.assigns.room_id
       player_id = socket.assigns.player_id
       room_code = socket.assigns.room_code
@@ -1202,6 +1181,35 @@ defmodule VnPartyWeb.GameChannel do
     maybe_register_rematch_disconnect_vote(socket)
 
     :ok
+  end
+
+  defp should_remove_player_on_disconnect?(reason, socket) do
+    if socket.assigns[:left_voluntarily], do: false
+
+    case reason do
+      :normal -> false
+      {:shutdown, :left} -> false
+      {:shutdown, :nominate} -> false
+      {:shutdown, _} -> false
+      _ -> true
+    end
+  end
+
+  defp build_join_response(room, game_state) do
+    if room.state == "round_start" and room.current_round > 0 and
+         Game.room_mode(room) != "truth_collapse" do
+      question = generate_mock_question(room.current_round)
+
+      player_question = %{
+        id: question.id,
+        options: ["A", "B", "C", "D"],
+        time_limit: question.time_limit
+      }
+
+      Map.put(game_state, :current_question, player_question)
+    else
+      game_state
+    end
   end
 
   # ============================================================================
@@ -2205,13 +2213,16 @@ defmodule VnPartyWeb.GameChannel do
   defp distortion_cost("merge_realities"), do: 4
   defp distortion_cost(_), do: 99
 
-  defp validate_distortion_payload("remove_option", payload, room, _player_id) do
+  defp validate_distortion_payload("remove_option", payload, room, player_id) do
     target = Map.get(payload, "target_player_id", Map.get(payload, :target_player_id))
     connected_ids = room.id |> Game.list_players() |> Enum.filter(& &1.connected) |> Enum.map(& &1.id)
 
     cond do
       not is_binary(target) or target == "" ->
         {:error, "Please select a target player"}
+
+      target == player_id ->
+        {:error, "Cannot remove your own options"}
 
       target not in connected_ids ->
         {:error, "Target player is not connected"}
@@ -2234,12 +2245,30 @@ defmodule VnPartyWeb.GameChannel do
     end
   end
 
-  defp validate_distortion_payload("force_blind", payload, _room, _player_id) do
+  defp validate_distortion_payload("force_blind", payload, room, player_id) do
     target = Map.get(payload, "target_player_id", Map.get(payload, :target_player_id))
-    if is_binary(target) and target != "" do
-      {:ok, %{"target_player_id" => target}}
+    connected_ids = room.id |> Game.list_players() |> Enum.filter(& &1.connected) |> Enum.map(& &1.id)
+
+    cond do
+      not is_binary(target) or target == "" ->
+        {:ok, %{"target_player_id" => "__all_others__"}}
+
+      target == player_id ->
+        {:error, "Cannot force-blind yourself"}
+
+      target not in connected_ids ->
+        {:error, "Target player is not connected"}
+
+      true ->
+        {:ok, %{"target_player_id" => target}}
+    end
+  end
+
+  defp validate_distortion_payload("merge_realities", payload, room, _player_id) do
+    if room.current_round >= room.total_rounds do
+      {:error, "Merge realities has no effect on the final round"}
     else
-      {:ok, %{"target_player_id" => "__all_others__"}}
+      {:ok, payload}
     end
   end
 

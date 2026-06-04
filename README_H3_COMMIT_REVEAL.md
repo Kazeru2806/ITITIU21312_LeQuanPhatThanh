@@ -1,53 +1,106 @@
-## H3 (Commit–Reveal Anti-Cheating) – Attack Simulation + Detection Rate
+# H3 — Commit–reveal security (what is actually being tested)
 
-### Status
+## Hypothesis
 
-H3 is **implemented and empirically testable** in this repo.
+**H3:** The commit–reveal protocol detects cheating attempts (hash tampering, replay, late commit, suspicious timing) at a rate **≥ 95%** per attack type.
 
-What is enforced/detected:
-- **Hash tampering**: if stored `answer`/`salt` are modified, we recompute and detect mismatch against `commit_hash`
-- **Replay attack**: same `commit_hash` cannot be reused by the same player in the same room across rounds
-- **Late commit**: commits after the reveal window closes are rejected
-- **Timing manipulation**: commits very near the deadline are flagged as suspicious (`violation_reason="timing_manipulation"`)
+---
 
-### What “finished” means (success criterion)
+## Two layers of evidence (read this for the thesis)
 
-Run 4 attack scenarios × 100 attempts each (400 total) and verify:
-- detection rate **>= 95%** for each scenario
+### Layer A — Automated detection logic (white-box)
 
-### Prereqs (macOS + Docker Postgres)
-
-From repo root, start Postgres (and Redis if you want it running too):
-
-```bash
-docker compose up -d
-docker compose ps
-```
-
-Create the test database **once** (the repo expects `vnparty_test` in MIX_ENV=test):
-
-```bash
-docker exec -i vnparty_postgres createdb -U vnparty_dev vnparty_test || true
-```
-
-### Run the H3 attack simulations
+File: `backend/test/h3_attack_sim_test.exs`
 
 ```bash
 cd backend
-mix ecto.migrate
 MIX_ENV=test mix ecto.create
 MIX_ENV=test mix ecto.migrate
 MIX_ENV=test mix test test/h3_attack_sim_test.exs
 ```
 
-### How to interpret the output
+This runs **400 controlled attempts** (4 scenarios × 100 each) by calling `Game` / commit functions directly.
 
-The test prints a report like:
+**What this proves:** The detection **code paths** work when fed known-bad inputs.
 
-- `hash_tampering: detected=100/100 rate=100%`
-- `replay_attack: detected=100/100 rate=100%`
-- `late_commit: detected=100/100 rate=100%`
-- `timing_manipulation: detected=100/100 rate=100%`
+**What this does NOT prove alone:** That a remote attacker cannot bypass checks via HTTP/WebSocket in production. That requires Layer B.
 
-If any scenario is below **95%**, H3 fails and needs adjustments (thresholds, enforcement, or protocol design).
+### Layer B — Independent verification (black-box / audit)
 
+After real games on Render:
+
+1. **Audit API:** `GET /api/rooms/:code/audit` — hash chain in `blockchain_anchors`
+2. **Manual tamper attempt:** Try to POST a commit with a mismatched hash via API (should be rejected)
+3. **DB tamper detection:** If someone edits `answer_commits` in Postgres, reveal/score must flag `hash_tampering`
+
+**What this proves:** The running system + audit trail align with the protocol design.
+
+---
+
+## Attack scenarios (Layer A)
+
+| Scenario | What it simulates | Expected detection |
+|----------|-------------------|-------------------|
+| `hash_tampering` | Stored answer changed after commit | Recompute hash ≠ `commit_hash` |
+| `replay_attack` | Reuse same commit hash in another round | Rejected as duplicate |
+| `late_commit` | Commit after window closed | Rejected |
+| `timing_manipulation` | Commit in last milliseconds | Flagged suspicious |
+
+Pass criterion: **≥ 95% detected** per scenario (test prints rates).
+
+---
+
+## How to run Layer A (step by step)
+
+```bash
+# Postgres for test DB
+docker compose up -d
+
+docker exec -i vnparty_postgres createdb -U vnparty_dev vnparty_test 2>/dev/null || true
+
+cd backend
+mix ecto.migrate
+MIX_ENV=test mix test test/h3_attack_sim_test.exs --trace
+```
+
+Save the printed summary for your appendix.
+
+---
+
+## Layer B — Production checklist (Render)
+
+After deploying backend with migrations:
+
+1. Play one full Classic round on Vercel + Render
+2. Call audit endpoint:
+
+```bash
+curl -s "https://YOUR-SERVICE.onrender.com/api/rooms/ROOMCODE/audit" | jq .
+```
+
+3. Confirm `blockchain_anchors` rows chain (`prev_chain_hash` → `chain_hash`)
+4. Document that commits are stored **before** reveal and hashes are verified at reveal time (see `README_SECURITY_ANSWER_COMMITS.md`)
+
+---
+
+## Academic honesty (important)
+
+| Approach | Valid for thesis? |
+|----------|-------------------|
+| `h3_attack_sim_test.exs` only | **Partial** — implementation verification |
+| Sim test + audit API + one manual API rejection | **Strong** — design + deployment |
+| Sim test + third-party pen test | **Strongest** — if available |
+
+State clearly in your methodology: *“Automated tests validate detection logic; production audit endpoint validates append-only event hashing after live sessions.”*
+
+---
+
+## Blockchain link (H3 + audit trail)
+
+Each `answer_committed`, `answer_revealed`, `distortion_used`, etc. creates a `game_events` row. `AuditTrail.on_event/1` appends SHA-256 chain entries. Optional EVM anchor when configured.
+
+---
+
+## VM sync
+
+See [README_SYNC_VM.md](README_SYNC_VM.md).

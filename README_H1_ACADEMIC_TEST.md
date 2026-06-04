@@ -1,76 +1,110 @@
-# H1 latency — academic test protocol
+# H1 — Latency hypothesis (step-by-step)
 
-## Hypothesis (H1)
+## What you are testing
 
-Under **moderate** simulated WAN impairment, client→server latency for gameplay messages remains acceptable: **p95 ≤ 300 ms** for `submit_prediction` (Truth Collapse load path).
+**Hypothesis H1:** When the network is moderately degraded, player messages still reach the server quickly enough for gameplay — specifically **p95 latency ≤ 300 ms** for `submit_prediction` in Truth Collapse.
 
-## Why H1 can “fail” under degradation
+This is **not** a manual “play the game and guess” test. It is a **controlled measurement** using:
 
-1. **TCP + netem**: artificial delay/loss inflates tail latency (retransmits), not only app time.
-2. **Bursty load**: many players sending at once queues on one VM CPU.
-3. **Wrong network interface** for `tc netem` (traffic bypasses the qdisc).
-4. **Mixed events** in DB without filtering `submit_prediction`.
+1. A load generator (`tools/loadgen/latency_loadgen.mjs`)
+2. Rows stored in Postgres (`latency_measurements`)
+3. A Python script that computes p50/p95/p99 and draws a CDF
 
-This project records one row per message in `latency_measurements` with `event`, `latency_ms`, and timestamps.
+---
 
-## Prerequisites (VM)
+## Where to run this (production vs VM)
+
+| Setup | Use when |
+|-------|----------|
+| **Render backend (production)** | Thesis results that match your deployed demo (Vercel + Render) |
+| **Ubuntu VM** | Optional: apply `tc netem` on the VM network interface for artificial delay |
+
+You do **not** need the VM if you test against Render. You **do** need netem (or similar) somewhere on the path if you want to simulate “degraded WAN” — typically on the machine that runs the load generator, or on a Linux VM between client and Render.
+
+**Set these before running loadgen against Render:**
 
 ```bash
-sudo apt-get install -y iproute2
-cd ~/vn-party-thesis/backend && mix deps.get && mix ecto.setup
-cd ~/vn-party-thesis/tools/loadgen && npm install
+export API_BASE="https://YOUR-SERVICE.onrender.com/api"
+export WS_BASE="wss://YOUR-SERVICE.onrender.com/socket/websocket"
+```
+
+---
+
+## Step 0 — One-time setup
+
+On your Mac (or Linux test machine):
+
+```bash
+cd vn-party-thesis/tools/loadgen && npm install
 python3 -m venv ~/vn-party-venv && source ~/vn-party-venv/bin/activate
-pip install -r ~/vn-party-thesis/analysis/requirements.txt
+pip install -r vn-party-thesis/analysis/requirements.txt
 ```
 
-Find the interface used to reach the VM (often `eth0` or `enp0s1`):
+Confirm the backend is up:
 
 ```bash
-ip route get 8.8.8.8
-export IFACE=eth0   # replace with your interface name
+curl -s "$API_BASE/health" || curl -s "${API_BASE%/api}/api/health"
 ```
 
-## Controlled procedure (one scenario)
+---
 
-Run **on the VM** where Phoenix listens on `0.0.0.0:4000`.
+## Step 1 — Baseline (no artificial delay)
 
-### A. Baseline (no netem)
+**Terminal A:** backend already running on Render (no action).
+
+**Terminal B:** run loadgen:
 
 ```bash
-cd ~/vn-party-thesis
-./scripts/netem/clear.sh
-cd backend && mix phx.server
+cd vn-party-thesis/tools/loadgen
+node latency_loadgen.mjs \
+  --api "$API_BASE" \
+  --ws "$WS_BASE" \
+  --players 8 \
+  --messages 100 \
+  --interval-ms 500 \
+  --mode truth_collapse
 ```
 
-Second terminal:
+The script prints `room=XXXX`. Copy that code.
+
+---
+
+## Step 2 — Export latency CSV from the server
+
+You need shell access to the environment where Postgres lives (Render shell, or VM):
 
 ```bash
-cd ~/vn-party-thesis/tools/loadgen
-node latency_loadgen.mjs --host 127.0.0.1 --players 8 --messages 100 --interval-ms 500 --mode truth_collapse
+cd backend
+mix telemetry.export_latency XXXX \
+  --event submit_prediction \
+  --out ../analysis/out_baseline.csv
 ```
 
-Note the printed `room=XXXX`.
+If you only have Render and no shell, run export locally against the same `DATABASE_URL` (read-only is enough).
 
-### B. Export samples
+---
 
-```bash
-cd ~/vn-party-thesis/backend
-mix telemetry.export_latency ROOMCODE --event submit_prediction --out ../analysis/out_baseline.csv
-```
+## Step 3 — Degraded network (moderate scenario)
 
-### C. Apply impairment and repeat
+On a **Linux** machine that can shape traffic toward Render (VM recommended):
 
 ```bash
+cd vn-party-thesis
+export IFACE=eth0   # see: ip route get 1.1.1.1
 ./scripts/netem/apply.sh moderate
-# re-run loadgen (new room or same with fresh create)
-node tools/loadgen/latency_loadgen.mjs --host 127.0.0.1 --players 8 --messages 100 --interval-ms 500
-mix telemetry.export_latency ROOMCODE --event submit_prediction --out ../analysis/out_moderate.csv
+```
+
+Re-run Step 1 (new room), then export to `analysis/out_moderate.csv`, then:
+
+```bash
 ./scripts/netem/clear.sh
 ```
 
-Repeat for `light`, `heavy` if your thesis matrix requires four scenarios.
+Repeat for `light` and `heavy` if your thesis matrix requires four scenarios.
 
-### D. Analysis (reportable statistics)
+---
+
+## Step 4 — Analysis (thesis statistics)
 
 ```bash
 source ~/vn-party-venv/bin/activate
@@ -81,27 +115,36 @@ python analysis/latency_analyze.py \
   --event submit_prediction
 ```
 
-Report in thesis: **n**, **p50**, **p90**, **p95**, **p99**, CDF figure path, scenario parameters from `scripts/netem/`.
+Open `analysis/results/latency_report_moderate_submit_prediction.txt`.
 
-### E. Pass criterion
+---
 
-From `analysis/results/latency_report_moderate_submit_prediction.txt`:
+## Step 5 — Pass / fail
 
-- **Pass H1** if `p95 <= 300.00` ms in **moderate**.
-- Document that **heavy** may fail p95 while the app remains functional — that supports the “degraded conditions” narrative.
+| Result | Meaning |
+|--------|---------|
+| **p95 ≤ 300 ms** in **moderate** | H1 supported for that scenario |
+| **p95 > 300 ms** in heavy | Expected; document as “functional but tail latency grows under stress” |
 
-## Minimum sample size (thesis wording)
+Report in thesis: **n**, **p50**, **p90**, **p95**, **p99**, scenario name, netem parameters, API/WS URLs used.
 
-Per scenario: **8 players × 100 messages = 800 samples** (loadgen default). Four scenarios → **3200** total if all complete.
+---
 
-## Reproducibility checklist
+## Minimum sample size
 
-- [ ] Single VM, `mix phx.server` bound to `0.0.0.0:4000`
-- [ ] `longpoll: true` on `/socket` (required for loadgen fallback)
-- [ ] netem applied on correct `IFACE`
+Default loadgen: **8 players × 100 messages = 800 samples** per scenario.
+
+---
+
+## Checklist before you cite results
+
+- [ ] `VITE_API_URL` / `VITE_WS_URL` on Vercel point to the **same** Render backend you measured
 - [ ] Export filtered by `--event submit_prediction`
-- [ ] CSV + PNG + report text archived for appendix
+- [ ] CSV + CDF PNG saved for appendix
+- [ ] Scenario documented (baseline / light / moderate / heavy)
 
-## Sync from Mac before testing
+---
+
+## VM sync (optional local copy)
 
 See [README_SYNC_VM.md](README_SYNC_VM.md).

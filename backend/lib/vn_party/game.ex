@@ -295,6 +295,8 @@ end
   """
   def get_player!(id), do: Repo.get!(Player, id)
 
+  def get_player(id), do: Repo.get(Player, id)
+
   @doc """
   Lists all players in a room.
   """
@@ -460,10 +462,15 @@ end
       end_game_early(room_id)
     end
 
+    # Mark room closed so late joins and stale sockets cannot continue.
+    room
+    |> Room.changeset(%{state: "game_end", current_round: 0})
+    |> Repo.update()
+
     payload = %{
       reason: "room_closed",
       message: "The host ended this room. Returning to the main screen.",
-      redirect_seconds: 30
+      redirect_seconds: 5
     }
 
     VnPartyWeb.Endpoint.broadcast("game:#{code}", "room_closed", payload)

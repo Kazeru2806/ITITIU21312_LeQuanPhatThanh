@@ -155,6 +155,33 @@ export function useGameSocket({
     truthProgressRef.current = onTruthResultsProgress;
     const truthResumeRef = useRef(onTruthResume);
     truthResumeRef.current = onTruthResume;
+    const cbRef = useRef<UseGameSocketProps>({ roomCode, playerId, nickname });
+    cbRef.current = {
+        roomCode,
+        playerId,
+        nickname,
+        onGameState,
+        onPlayerJoined,
+        onPlayerDisconnected,
+        onGameStarted,
+        onDiscussionStarted,
+        onQuestionRevealed,
+        onPlayerCommitted,
+        onAnswerRevealed,
+        onRoundScored,
+        onRoundStarted,
+        onGameEnded,
+        onTruthStatsUpdated,
+        onDistortionUsed,
+        onRematchVoteUpdated,
+        onRematchStarting,
+        onRematchCancelled,
+        onTruthResultsProgress,
+        onTruthResume,
+        onPlayersSync,
+        onHostChanged,
+        onRoomClosed,
+    };
 
     useEffect(() => {
         // Create socket connection
@@ -184,14 +211,13 @@ export function useGameSocket({
                 console.log('✅ Joined game channel', response);
                 setConnected(true);
                 setError(null);
-                if (onGameState) {
-                    onGameState(response);
-                }
+                const c = cbRef.current;
+                if (c.onGameState) c.onGameState(response);
                 if (response.truth_resume && truthResumeRef.current) {
                     truthResumeRef.current(response.truth_resume);
-                } else if (response.current_question && onQuestionRevealed) {
+                } else if (response.current_question && c.onQuestionRevealed) {
                     console.log('❓ Received current question on join:', response.current_question);
-                    onQuestionRevealed(response.current_question);
+                    c.onQuestionRevealed(response.current_question);
                 }
             })
             .receive('error', (response: { reason?: string }) => {
@@ -202,105 +228,88 @@ export function useGameSocket({
 
         // Listen to events
         channel.on('player_joined', (data: PlayerJoinedData) => {
-            console.log('👤 Player joined:', data);
-            if (onPlayerJoined) onPlayerJoined(data);
+            cbRef.current.onPlayerJoined?.(data);
         });
 
         channel.on('player_disconnected', (data: PlayerDisconnectedData) => {
-            console.log('👤 Player disconnected:', data);
-            if (onPlayerDisconnected) onPlayerDisconnected(data);
+            cbRef.current.onPlayerDisconnected?.(data);
         });
 
         channel.on('players_sync', (data: { players?: PlayerJoinedData['players']; host_id?: string }) => {
-            if (onPlayersSync && data.players) onPlayersSync(data as { players: NonNullable<PlayerJoinedData['players']>; host_id?: string });
+            if (data.players) cbRef.current.onPlayersSync?.({ players: data.players, host_id: data.host_id });
         });
 
         channel.on('player_left', (data: PlayerDisconnectedData) => {
-            if (onPlayerDisconnected) onPlayerDisconnected(data);
-            if (onPlayersSync && data.players) onPlayersSync({ players: data.players });
+            cbRef.current.onPlayerDisconnected?.(data);
+            if (data.players) cbRef.current.onPlayersSync?.({ players: data.players });
         });
 
         channel.on('host_changed', (data: { host_id: string; host_nickname: string }) => {
-            if (onHostChanged) onHostChanged(data);
+            cbRef.current.onHostChanged?.(data);
         });
 
         channel.on('room_closed', (data: { message: string; redirect_seconds?: number }) => {
-            if (onRoomClosed) onRoomClosed(data);
+            cbRef.current.onRoomClosed?.(data);
         });
 
         channel.on('game_started', (data: GameStartedData) => {
-            console.log('🎮 Game started:', data);
-            if (onGameStarted) onGameStarted(data);
+            cbRef.current.onGameStarted?.(data);
         });
 
         channel.on('discussion_started', (data: DiscussionStartedData) => {
-            console.log('🗣 Discussion started:', data);
-            if (onDiscussionStarted) onDiscussionStarted(data);
+            cbRef.current.onDiscussionStarted?.(data);
         });
 
         channel.on('question_revealed', (data: Question) => {
-            console.log('❓ Question revealed:', data);
-            if (onQuestionRevealed) onQuestionRevealed(data);
+            cbRef.current.onQuestionRevealed?.(data);
         });
 
         channel.on('player_committed', (data: PlayerCommittedData) => {
-            console.log('✅ Player committed answer:', data);
-            if (onPlayerCommitted) onPlayerCommitted(data);
+            cbRef.current.onPlayerCommitted?.(data);
         });
 
         channel.on('answer_revealed', (data: AnswerRevealedData) => {
-            console.log('🔓 Answer revealed:', data);
-            if (onAnswerRevealed) onAnswerRevealed(data);
+            cbRef.current.onAnswerRevealed?.(data);
         });
 
         channel.on('round_scored', (data: RoundScoredData) => {
-            console.log('🏆 Round scored:', data);
-            if (onRoundScored) onRoundScored(data);
+            cbRef.current.onRoundScored?.(data);
         });
 
         channel.on('truth_stats_updated', (data: any) => {
-            console.log('🧾 Truth stats updated:', data);
-            if (onTruthStatsUpdated) onTruthStatsUpdated(data);
+            cbRef.current.onTruthStatsUpdated?.(data);
         });
 
         channel.on('distortion_used', (data: any) => {
-            console.log('🧩 Distortion used:', data);
-            if (onDistortionUsed) onDistortionUsed(data);
+            cbRef.current.onDistortionUsed?.(data);
         });
 
         channel.on('round_started', (data: RoundStartedData) => {
-            console.log('🔄 New round started:', data);
-            if (onRoundStarted) onRoundStarted(data);
+            cbRef.current.onRoundStarted?.(data);
         });
 
         channel.on('truth_results_progress', (data: any) => {
-            console.log('✓ Truth results ready:', data);
             truthProgressRef.current?.(data);
         });
 
         channel.on('game_ended', (data: GameEndedData) => {
-            console.log('🎉 Game ended:', data);
-            if (onGameEnded) onGameEnded(data);
+            cbRef.current.onGameEnded?.(data);
         });
 
         channel.on('rematch_vote_updated', (data: any) => {
-            console.log('🔄 Rematch vote updated:', data);
-            if (onRematchVoteUpdated) onRematchVoteUpdated(data);
+            cbRef.current.onRematchVoteUpdated?.(data);
         });
 
         channel.on('rematch_starting', () => {
-            console.log('🎮 Rematch starting!');
-            if (onRematchStarting) onRematchStarting();
+            cbRef.current.onRematchStarting?.();
         });
 
-        channel.on('rematch_approved', (data: any) => {
-            console.log('✅ Rematch approved!', data);
-            if (onRematchStarting) onRematchStarting();
+        channel.on('rematch_approved', () => {
+            cbRef.current.onRematchStarting?.();
         });
 
         channel.on('rematch_cancelled', (data: any) => {
-            console.log('❌ Rematch cancelled!', data);
-            if (onRematchCancelled) onRematchCancelled(data);
+            cbRef.current.onRematchCancelled?.(data);
         });
 
         const heartbeat = () => {
@@ -442,18 +451,19 @@ export function useGameSocket({
                 resolve();
                 return;
             }
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                channel.leave();
+                socketRef.current?.disconnect();
+                resolve();
+            };
+            window.setTimeout(finish, 3000);
             channel
                 .push('leave_room', {})
-                .receive('ok', () => {
-                    channel.leave();
-                    socketRef.current?.disconnect();
-                    resolve();
-                })
-                .receive('error', () => {
-                    channel.leave();
-                    socketRef.current?.disconnect();
-                    resolve();
-                });
+                .receive('ok', finish)
+                .receive('error', finish);
         });
     };
 
@@ -464,18 +474,19 @@ export function useGameSocket({
                 resolve();
                 return;
             }
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                channel.leave();
+                socketRef.current?.disconnect();
+                resolve();
+            };
+            window.setTimeout(finish, 3000);
             channel
                 .push('close_room', {})
-                .receive('ok', () => {
-                    channel.leave();
-                    socketRef.current?.disconnect();
-                    resolve();
-                })
-                .receive('error', () => {
-                    channel.leave();
-                    socketRef.current?.disconnect();
-                    resolve();
-                });
+                .receive('ok', finish)
+                .receive('error', finish);
         });
     };
 
