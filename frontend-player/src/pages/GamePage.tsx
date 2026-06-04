@@ -63,10 +63,14 @@ export function GamePage() {
         currentQuestion?.time_limit ?? 15
     );
     const discussionLeft = usePhaseTimer(phase === 'discussion' ? phaseEndsAtMs : null, 15);
+    const resultsLeft = usePhaseTimer(phase === 'results' ? phaseEndsAtMs : null, 45);
 
     useEffect(() => {
         if (phase === 'discussion' && !phaseEndsAtMs) {
             setPhaseEndsAtMs(Date.now() + 15 * 1000);
+        }
+        if (phase === 'results' && !phaseEndsAtMs) {
+            setPhaseEndsAtMs(Date.now() + 45 * 1000);
         }
     }, [phase, phaseEndsAtMs]);
 
@@ -209,10 +213,14 @@ export function GamePage() {
         if (resume.phase === 'results') {
             setPhase('results');
             setShowResult(true);
+            setQuestion(null);
             if (resume.stats?.length) setTruthStats(resume.stats);
             setResultsReadySent(false);
             const connected = useGameStore.getState().players.filter((p) => p.connected).length;
             setResultsReadyProgress({ acked: 0, total: connected || useGameStore.getState().players.length || 0 });
+            setPhaseEndsAtMs(
+                resume.phase_ends_at_ms ?? Date.now() + ((resume as { results_seconds?: number }).results_seconds ?? 45) * 1000
+            );
         }
     };
 
@@ -372,13 +380,21 @@ export function GamePage() {
             console.log('Round scored (player view):', data);
             setShowResult(true);
             setPhase('results');
+            setQuestion(null);
+            setPhaseEndsAtMs(Date.now() + 45 * 1000);
             if (data?.stats) setTruthStats(data.stats);
             setPendingDistortion(null);
             setDistortionLocked(false);
             setDistortionTarget('');
             setFakeOptionText('');
+            setFakeLockConfirmed(false);
+            setFakePreview(null);
             setResultsReadySent(false);
-            setResultsReadyProgress(null);
+            const connected = useGameStore.getState().players.filter((p) => p.connected).length;
+            setResultsReadyProgress({
+                acked: 0,
+                total: connected || useGameStore.getState().players.length || 0,
+            });
             setCommittedIds(new Set());
         },
         onRoundStarted: (data: any) => {
@@ -512,9 +528,6 @@ export function GamePage() {
 
     const handleDiscussionReady = async () => {
         if (discussionReadySent) return;
-        if (pendingDistortion && !distortionLocked) {
-            await tryApplyPendingDistortion();
-        }
         try {
             await truthDiscussionReady();
             setDiscussionReadySent(true);
@@ -523,14 +536,15 @@ export function GamePage() {
             const msg = e instanceof Error ? e.message : 'Could not confirm — check connection.';
             setDistortionToast(msg);
             console.error('truth_discussion_ready failed', e);
+            return;
+        }
+        if (pendingDistortion && !distortionLocked) {
+            void tryApplyPendingDistortion();
         }
     };
 
     const handleTruthResultsReady = async () => {
         if (resultsReadySent) return;
-        if (pendingDistortion && !distortionLocked) {
-            await tryApplyPendingDistortion();
-        }
         try {
             await truthResultsReady();
             setResultsReadySent(true);
@@ -539,6 +553,10 @@ export function GamePage() {
             const msg = e instanceof Error ? e.message : 'Could not confirm — check connection.';
             setDistortionToast(msg);
             console.error('truth_results_ready failed', e);
+            return;
+        }
+        if (pendingDistortion && !distortionLocked) {
+            void tryApplyPendingDistortion();
         }
     };
 
@@ -800,9 +818,16 @@ export function GamePage() {
                 <div className="flex-1 flex items-center justify-center relative z-10">
                     <div className="w-full max-w-lg">
                         <div className="text-center mb-6 p-6 rounded-xl border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50">
+                            <div className="flex justify-center mb-3">
+                                <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black text-white bg-gradient-to-br from-pink-500 to-purple-600 border-4 border-purple-300">
+                                    {resultsLeft}
+                                </div>
+                            </div>
                             <PhoThePhoenix className="w-24 h-28 mx-auto drop-shadow-lg mb-3" />
                             <p className="text-2xl font-black text-purple-700">Round results</p>
-                            <p className="text-gray-700 font-semibold mt-2">Look at the host screen for scores</p>
+                            <p className="text-gray-700 font-semibold mt-2">
+                                Next round in {resultsLeft}s — look at the host screen for scores
+                            </p>
                         </div>
                         <TruthDistortionPanel
                             myCharges={myCharges}
@@ -825,6 +850,23 @@ export function GamePage() {
                         />
                     </div>
                 </div>
+            </div>
+        );
+    }
+
+    if (mode === 'truth_collapse' && !['transition', 'discussion', 'answering', 'results'].includes(phase)) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6">
+                <PhoThePhoenix className="w-24 h-28 mb-4" />
+                <p className="text-purple-800 font-bold text-lg mb-2">Syncing with the room…</p>
+                <p className="text-gray-600 text-sm">If this lasts more than a few seconds, return to the lobby.</p>
+                <button
+                    type="button"
+                    onClick={() => navigate('/lobby')}
+                    className="mt-4 px-6 py-3 rounded-xl bg-purple-600 text-white font-bold"
+                >
+                    Back to lobby
+                </button>
             </div>
         );
     }

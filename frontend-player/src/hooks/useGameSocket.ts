@@ -299,6 +299,13 @@ export function useGameSocket({
             cbRef.current.onRoundStarted?.(data);
         });
 
+        channel.on('game_state', (data: Room & { truth_resume?: TruthResume }) => {
+            cbRef.current.onGameState?.(data);
+            if (data.truth_resume && truthResumeRef.current) {
+                truthResumeRef.current(data.truth_resume);
+            }
+        });
+
         channel.on('truth_results_progress', (data: any) => {
             truthProgressRef.current?.(data);
         });

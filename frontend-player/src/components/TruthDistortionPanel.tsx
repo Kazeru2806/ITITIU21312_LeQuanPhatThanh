@@ -156,7 +156,7 @@ export function TruthDistortionPanel({
         </div>
       )}
 
-      <div className="mt-6 p-4 rounded-xl border border-purple-200 bg-purple-50/90">
+      <div className="mt-6 p-4 rounded-xl border border-purple-200 bg-purple-50/90 relative z-20">
         {readyProgress ? (
           <p className="text-center font-bold text-purple-800 mb-3">
             Ready: {readyProgress.acked}/{readyProgress.total}

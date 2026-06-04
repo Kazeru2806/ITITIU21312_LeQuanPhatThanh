@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 import { useGameSocket } from '../hooks/useGameSocket';
+import { api } from '../lib/api';
 import { PhoThePhoenix } from '../components/PhoThePhoenix';
 import { LotusPattern, DragonPattern, LanternPattern, BambooPattern } from '../components/VietnamesePatterns';
 
 export function ResultsPage() {
     const navigate = useNavigate();
     const [rematchVotes, setRematchVotes] = useState(0);
+    const [declinedCount, setDeclinedCount] = useState(0);
     const [totalPlayers, setTotalPlayers] = useState(0);
     const [hasVoted, setHasVoted] = useState(false);
     const [countdown, setCountdown] = useState(30);
@@ -19,6 +21,7 @@ export function ResultsPage() {
         playerId,
         nickname,
         reset,
+        setPlayers,
         setGameState,
         setRound,
     } = useGameStore();
@@ -28,6 +31,29 @@ export function ResultsPage() {
             navigate('/');
         }
     }, [playerId, roomCode, navigate]);
+
+    useEffect(() => {
+        if (!roomCode) return;
+        let cancelled = false;
+        const poll = async () => {
+            try {
+                const res = await api.getRoom(roomCode);
+                if (!cancelled && res.success && res.room?.state === 'lobby') {
+                    setGameState('lobby');
+                    setRound(0, res.room.total_rounds ?? 5);
+                    navigate('/lobby');
+                }
+            } catch {
+                // ignore
+            }
+        };
+        poll();
+        const id = window.setInterval(poll, 2500);
+        return () => {
+            cancelled = true;
+            window.clearInterval(id);
+        };
+    }, [roomCode, navigate, setGameState, setRound]);
 
     // Countdown timer - backend handles timeout, this is just for display
     useEffect(() => {
@@ -49,10 +75,19 @@ export function ResultsPage() {
         roomCode: roomCode || '',
         playerId: playerId || '',
         nickname: nickname || '',
+        onGameState: (state: any) => {
+            if (state.state === 'lobby') {
+                if (state.players) setPlayers(state.players);
+                setGameState('lobby');
+                setRound(state.current_round ?? 0, state.total_rounds ?? 5);
+                navigate('/lobby');
+            }
+        },
         onRematchVoteUpdated: (data: any) => {
             console.log('Rematch vote updated:', data);
-            setRematchVotes(data.vote_count);
-            setTotalPlayers(data.total_players);
+            setRematchVotes(data.vote_count ?? 0);
+            setDeclinedCount(data.declined_count ?? 0);
+            setTotalPlayers(data.total_players ?? players.length);
         },
         onGameStarted: () => {
             // Rematch started - navigate to game
@@ -210,7 +245,8 @@ export function ResultsPage() {
                             <div>
                                 <p className="font-black text-gray-800 text-lg lg:text-2xl mb-1 lg:mb-2">Đồng ý chơi lại?</p>
                                 <p className="text-sm lg:text-lg text-gray-700 font-semibold">
-                                    {rematchVotes} / {totalPlayers || players.length} người đồng ý
+                                    {rematchVotes} / {totalPlayers || players.length} đồng ý
+                                    {declinedCount > 0 ? ` · ${declinedCount} từ chối` : ''}
                                 </p>
                             </div>
                             <div className="text-3xl lg:text-5xl font-black vietnamese-text-gradient">

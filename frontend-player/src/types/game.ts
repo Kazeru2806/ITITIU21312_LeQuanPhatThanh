@@ -34,6 +34,7 @@ export interface TruthResume {
   shuffle_preview?: string[];
   time_left?: number;
   phase_ends_at_ms?: number;
+  results_seconds?: number;
   current_question?: {
     id: string;
     options: string[];

@@ -396,18 +396,20 @@ defmodule VnPartyWeb.GameChannel do
             {:reply, {:error, %{reason: reason}}, socket}
 
           {:ok, cleaned_payload} ->
+            effect_round = distortion_effect_round(room, phase)
+
             DistortionRules.record_use!(room.id, player_id, action)
             update_truth_stats(player_id, fn s -> %{s | charges: max(0, s.charges - cost), di: s.di + cost * 10} end)
-            :ets.insert(:truth_distortions, {socket.assigns.room_id, room.current_round, player_id, action, cleaned_payload})
+            :ets.insert(:truth_distortions, {socket.assigns.room_id, effect_round, player_id, action, cleaned_payload})
 
             Game.create_event(room.id, "distortion_used", %{
               action: action,
-              round: room.current_round,
+              round: effect_round,
               payload: cleaned_payload
             }, player_id)
 
             log_payload = %{
-              round: room.current_round,
+              round: effect_round,
               player_id: player_id,
               nickname: socket.assigns.nickname,
               action: action,
@@ -449,7 +451,9 @@ defmodule VnPartyWeb.GameChannel do
         {:reply, {:error, %{reason: "No next round available"}}, socket}
 
       true ->
-        lock_key = {room.id, room.current_round, player_id}
+        phase = current_truth_phase(room.id)
+        effect_round = distortion_effect_round(room, phase)
+        lock_key = {room.id, effect_round, player_id}
         stats = get_truth_stats(player_id)
         cost = distortion_cost("inject_fake_option")
 
@@ -507,7 +511,9 @@ defmodule VnPartyWeb.GameChannel do
     %{"fake_text" => fake_text} = payload
     room = Game.get_room!(socket.assigns.room_id)
     player_id = socket.assigns.player_id
-    lock_key = {room.id, room.current_round, player_id}
+    phase = current_truth_phase(room.id)
+    effect_round = distortion_effect_round(room, phase)
+    lock_key = {room.id, effect_round, player_id}
     maybe_record_latency(socket, "set_fake_option_text", payload, %{})
 
     if Game.room_mode(room) != "truth_collapse" do
@@ -523,18 +529,21 @@ defmodule VnPartyWeb.GameChannel do
               {:reply, {:error, %{reason: reason}}, socket}
 
             {:ok, cleaned_payload} ->
+              phase = current_truth_phase(room.id)
+              effect_round = distortion_effect_round(room, phase)
+
               DistortionRules.record_use!(room.id, player_id, "inject_fake_option")
-              :ets.insert(:truth_distortions, {room.id, room.current_round, player_id, "inject_fake_option", cleaned_payload})
+              :ets.insert(:truth_distortions, {room.id, effect_round, player_id, "inject_fake_option", cleaned_payload})
               :ets.delete(:truth_fake_locks, lock_key)
 
               Game.create_event(room.id, "distortion_used", %{
                 action: "inject_fake_option",
-                round: room.current_round,
+                round: effect_round,
                 payload: cleaned_payload
               }, player_id)
 
               log_payload = %{
-                round: room.current_round,
+                round: effect_round,
                 player_id: player_id,
                 nickname: socket.assigns.nickname,
                 action: "inject_fake_option",
@@ -584,7 +593,7 @@ defmodule VnPartyWeb.GameChannel do
       broadcast_to_both(socket, "truth_results_progress", progress, "display:truth_results_progress", progress)
 
       if length(connected) > 0 and length(acked_ids) >= length(connected) do
-        send(self(), {:auto_advance_round, room_id, round})
+        PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:auto_advance_round, room_id, round})
       end
 
       {:reply, {:ok, %{received: true}}, socket}
@@ -775,19 +784,14 @@ defmodule VnPartyWeb.GameChannel do
     updated_votes = MapSet.put(current_votes, player_id)
     :ets.insert(:rematch_votes, {room_id, updated_votes})
 
-    total_players = rematch_snapshot_total(room_id)
-    vote_count = MapSet.size(updated_votes)
+    vote_payload = rematch_vote_payload(room_id)
+    vote_count = vote_payload[:vote_count]
+    total_players = vote_payload[:total_players]
 
     IO.puts("🔄 Rematch vote from player #{player_id}: #{vote_count}/#{total_players} (connected players only)")
-    IO.puts("   All voters: #{inspect(MapSet.to_list(updated_votes))}")
+    IO.puts("   All voters: #{inspect(vote_payload[:voters])}")
     IO.puts("   Snapshot total players: #{total_players}")
 
-    # Broadcast updated vote count to ALL players immediately
-    vote_payload = %{
-      vote_count: vote_count,
-      total_players: total_players,
-      voters: MapSet.to_list(updated_votes)
-    }
     broadcast_to_both(socket, "rematch_vote_updated", vote_payload, "display:rematch_vote_updated", vote_payload)
 
     # Trigger via internal PubSub so any alive channel can process it
@@ -810,22 +814,10 @@ defmodule VnPartyWeb.GameChannel do
     updated_declined = MapSet.put(current_declined, player_id)
     :ets.insert(:rematch_declined, {room_id, updated_declined})
 
-    total_players = rematch_snapshot_total(room_id)
-    declined_count = MapSet.size(updated_declined)
+    vote_payload = rematch_vote_payload(room_id)
 
-    IO.puts("❌ Rematch declined: #{declined_count}/#{total_players}")
+    IO.puts("❌ Rematch declined: #{vote_payload[:declined_count]}/#{vote_payload[:total_players]}")
 
-    votes = case :ets.lookup(:rematch_votes, room_id) do
-      [] -> MapSet.new()
-      [{^room_id, v}] -> v
-    end
-    vote_count = MapSet.size(votes)
-
-    vote_payload = %{
-      vote_count: vote_count,
-      total_players: total_players,
-      voters: MapSet.to_list(votes)
-    }
     broadcast_to_both(socket, "rematch_vote_updated", vote_payload, "display:rematch_vote_updated", vote_payload)
 
     PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:check_rematch, room_id})
@@ -855,15 +847,18 @@ defmodule VnPartyWeb.GameChannel do
 
   @impl true
   def handle_info(:after_join, socket) do
-    # Get updated player list
-    players = Game.list_players(socket.assigns.room_id)
+    room_id = socket.assigns.room_id
+    players = Game.list_players(room_id)
+    room = Game.get_room!(room_id)
 
-    # Broadcast that player joined: same info to both channels
+    # Late joiners / reconnects get authoritative state on their channel.
+    push(socket, "game_state", get_game_state(room))
+
     player_joined_payload = %{
       player_id: socket.assigns.player_id,
       nickname: socket.assigns.nickname,
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
-      players: format_players(players)
+      players: format_players(players, Game.room_mode(room))
     }
     broadcast_to_both(socket, "player_joined", player_joined_payload, "display:player_joined", player_joined_payload)
 
@@ -997,6 +992,11 @@ defmodule VnPartyWeb.GameChannel do
 
   @impl true
   def handle_info({:auto_advance_round, room_id, from_round}, socket) when is_integer(from_round) do
+    dedupe_key = {:auto_advance_processed, room_id, from_round}
+
+    if not :ets.insert_new(:round_scored, {dedupe_key, true}) do
+      {:noreply, socket}
+    else
     room = Game.get_room!(room_id)
 
     if room.current_round != from_round do
@@ -1095,11 +1095,11 @@ defmodule VnPartyWeb.GameChannel do
         :ets.delete(:truth_answering_mono, {room_id, r})
       end
 
-      # Set up rematch timeout (30 seconds)
-      Process.send_after(self(), {:rematch_timeout, room_id}, 30_000)
+      schedule_internal_message(room_id, {:rematch_timeout, room_id}, 30_000)
     end
 
       {:noreply, socket}
+    end
     end
   end
 
@@ -1152,6 +1152,7 @@ defmodule VnPartyWeb.GameChannel do
 
         approved_payload = %{message: "#{vote_count} players confirmed rematch.", voters: MapSet.to_list(votes)}
         broadcast_to_both(socket, "rematch_approved", approved_payload, "display:rematch_approved", approved_payload)
+        broadcast_game_state(room_id)
 
       all_decided ->
         clear_rematch_state(room_id)
@@ -1194,6 +1195,7 @@ defmodule VnPartyWeb.GameChannel do
 
       approved_payload = %{message: "#{vote_count} players confirmed rematch.", voters: MapSet.to_list(votes)}
       broadcast_to_both(socket, "rematch_approved", approved_payload, "display:rematch_approved", approved_payload)
+      broadcast_game_state(room_id)
     else
       clear_rematch_state(room_id)
 
@@ -1288,6 +1290,56 @@ defmodule VnPartyWeb.GameChannel do
   defp clear_truth_discussion_acks(room_id, round) do
     :ets.match_delete(:truth_discussion_ack, {{room_id, round, :_}, :_})
     :ok
+  end
+
+  @results_phase_seconds 45
+
+  # Discussion distortions apply to the current round; results-screen distortions apply to the next round.
+  defp distortion_effect_round(room, "discussion"), do: room.current_round
+
+  defp distortion_effect_round(room, "results") do
+    min(room.current_round + 1, room.total_rounds)
+  end
+
+  defp distortion_effect_round(room, _), do: room.current_round
+
+  defp schedule_results_auto_advance(room_id, round) do
+    key = {:results_auto_advance_scheduled, room_id, round}
+
+    if :ets.insert_new(:round_scored, {key, true}) do
+      schedule_internal_message(room_id, {:auto_advance_round, room_id, round}, @results_phase_seconds * 1000)
+    end
+  end
+
+  defp broadcast_game_state(room_id) do
+    room = Game.get_room!(room_id)
+    state = get_game_state(room)
+    Endpoint.broadcast("game:#{room.code}", "game_state", state)
+    state
+  end
+
+  defp rematch_vote_payload(room_id) do
+    votes =
+      case :ets.lookup(:rematch_votes, room_id) do
+        [] -> MapSet.new()
+        [{^room_id, v}] -> v
+      end
+
+    declined =
+      case :ets.lookup(:rematch_declined, room_id) do
+        [] -> MapSet.new()
+        [{^room_id, d}] -> d
+      end
+
+    total_players = rematch_snapshot_total(room_id)
+
+    %{
+      vote_count: MapSet.size(votes),
+      declined_count: MapSet.size(declined),
+      total_players: total_players,
+      voters: MapSet.to_list(votes),
+      declined: MapSet.to_list(declined)
+    }
   end
 
   defp question_time_limit(room) do
@@ -1470,7 +1522,7 @@ defmodule VnPartyWeb.GameChannel do
 
         # Auto-advance to next round after 5 seconds (show results)
         room = Game.get_room!(room_id)
-        Process.send_after(self(), {:auto_advance_round, room_id, room.current_round}, 5000)
+        schedule_internal_message(room_id, {:auto_advance_round, room_id, room.current_round}, 5_000)
       else
         IO.puts("❌ ERROR: Question ID mismatch in force scoring! Expected #{question_id}, got #{question.id}. Round #{round} may have wrong question.")
         # Still score with the generated question to prevent game from stalling
@@ -1521,7 +1573,7 @@ defmodule VnPartyWeb.GameChannel do
         broadcast_to_both(socket, "round_scored", player_scored_payload, "display:round_scored", display_scored_payload)
 
         room = Game.get_room!(room_id)
-        Process.send_after(self(), {:auto_advance_round, room_id, room.current_round}, 5000)
+        schedule_internal_message(room_id, {:auto_advance_round, room_id, room.current_round}, 5_000)
       end
 
       {:noreply, socket}
@@ -1597,7 +1649,7 @@ defmodule VnPartyWeb.GameChannel do
 
         # Auto-advance to next round after 5 seconds (show results)
         room = Game.get_room!(room_id)
-        Process.send_after(self(), {:auto_advance_round, room_id, room.current_round}, 5000)
+        schedule_internal_message(room_id, {:auto_advance_round, room_id, room.current_round}, 5_000)
       else
         IO.puts("❌ ERROR: Question ID mismatch in force scoring! Expected #{question_id}, got #{question.id}. Round #{round} may have wrong question.")
         # Still score with the generated question to prevent game from stalling
@@ -1648,7 +1700,7 @@ defmodule VnPartyWeb.GameChannel do
         broadcast_to_both(socket, "round_scored", player_scored_payload, "display:round_scored", display_scored_payload)
 
         room = Game.get_room!(room_id)
-        Process.send_after(self(), {:auto_advance_round, room_id, room.current_round}, 5000)
+        schedule_internal_message(room_id, {:auto_advance_round, room_id, room.current_round}, 5_000)
       end
 
       {:noreply, socket}
@@ -1896,6 +1948,7 @@ defmodule VnPartyWeb.GameChannel do
 
         Map.merge(base, %{
           discussion_seconds: left,
+          phase_ends_at_ms: System.system_time(:millisecond) + left * 1000,
           question_id: q2.id,
           category: q2.category,
           category_label: truth_category_label(q2.category),
@@ -1952,12 +2005,14 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   defp resume_truth_results(room_id, round, base) do
+    ends_at = System.system_time(:millisecond) + @results_phase_seconds * 1000
+
     case :ets.lookup(:truth_last_results, {room_id, round}) do
       [{{^room_id, ^round}, snap}] ->
-        Map.merge(base, snap)
+        Map.merge(base, Map.merge(snap, %{phase_ends_at_ms: ends_at, results_seconds: @results_phase_seconds}))
 
       [] ->
-        base
+        Map.merge(base, %{phase_ends_at_ms: ends_at, results_seconds: @results_phase_seconds})
     end
   end
 
@@ -2051,13 +2106,11 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   defp apply_distortions_for_round(room_id, round, question) do
-    prior_round = round - 1
-
     distortions_raw =
       :ets.lookup(:truth_distortions, room_id)
       |> Enum.flat_map(fn
-        {^room_id, ^prior_round, pid, action, payload} ->
-          [%{round: prior_round, player_id: pid, action: action, payload: payload, di: get_truth_stats(pid).di}]
+        {^room_id, ^round, pid, action, payload} ->
+          [%{round: round, player_id: pid, action: action, payload: payload, di: get_truth_stats(pid).di}]
 
         _ ->
           []
@@ -2509,8 +2562,8 @@ defmodule VnPartyWeb.GameChannel do
     initial_progress = %{round: round, acked_count: 0, total: length(connected_players), acked_player_ids: []}
     broadcast_to_both(socket, "truth_results_progress", initial_progress, "display:truth_results_progress", initial_progress)
 
-    # Give players time to think/use distortion powers before next round
-    Process.send_after(self(), {:auto_advance_round, room_id, round}, 60_000)
+    truth_clear_results_acks(room_id, round)
+    schedule_results_auto_advance(room_id, round)
     {:noreply, socket}
   end
 
@@ -2626,19 +2679,21 @@ defmodule VnPartyWeb.GameChannel do
     used_set = MapSet.new(used_ids)
     available = Enum.reject(questions, fn q -> MapSet.member?(used_set, q.id) end)
 
+    available =
+      if available == [] do
+        :ets.insert(:truth_question_history, {history_key, []})
+        questions
+      else
+        available
+      end
+
     selected =
       cond do
-        available != [] and pick_mode == :random ->
+        pick_mode == :random ->
           Enum.at(available, :rand.uniform(length(available)) - 1)
 
-        available != [] ->
-          Enum.at(available, rem(round - 1, length(available)))
-
-        pick_mode == :random ->
-          Enum.at(questions, :rand.uniform(length(questions)) - 1)
-
         true ->
-          Enum.at(questions, rem(round - 1, length(questions)))
+          Enum.at(available, rem(round - 1, length(available)))
       end
 
     next_used = Enum.take((used_ids ++ [selected.id]) |> Enum.uniq(), length(questions))
@@ -2652,7 +2707,11 @@ defmodule VnPartyWeb.GameChannel do
         %{id: "tg1", text: "Which country consumes the most coffee per capita?", options: [%{id: "A", text: "Finland"}, %{id: "B", text: "USA"}, %{id: "C", text: "Brazil"}, %{id: "D", text: "Japan"}], correct: "A"},
         %{id: "tg2", text: "How many hearts does an octopus have?", options: [%{id: "A", text: "1"}, %{id: "B", text: "2"}, %{id: "C", text: "3"}, %{id: "D", text: "4"}], correct: "C"},
         %{id: "tg3", text: "What is the smallest prime number?", options: [%{id: "A", text: "0"}, %{id: "B", text: "1"}, %{id: "C", text: "2"}, %{id: "D", text: "3"}], correct: "C"},
-        %{id: "tg4", text: "Which planet is known as the Red Planet?", options: [%{id: "A", text: "Venus"}, %{id: "B", text: "Mars"}, %{id: "C", text: "Jupiter"}, %{id: "D", text: "Saturn"}], correct: "B"}
+        %{id: "tg4", text: "Which planet is known as the Red Planet?", options: [%{id: "A", text: "Venus"}, %{id: "B", text: "Mars"}, %{id: "C", text: "Jupiter"}, %{id: "D", text: "Saturn"}], correct: "B"},
+        %{id: "tg5", text: "How many continents are there on Earth (standard model)?", options: [%{id: "A", text: "5"}, %{id: "B", text: "6"}, %{id: "C", text: "7"}, %{id: "D", text: "8"}], correct: "C"},
+        %{id: "tg6", text: "Which gas makes up most of Earth's atmosphere?", options: [%{id: "A", text: "Oxygen"}, %{id: "B", text: "Nitrogen"}, %{id: "C", text: "Carbon Dioxide"}, %{id: "D", text: "Argon"}], correct: "B"},
+        %{id: "tg7", text: "What is the chemical symbol for gold?", options: [%{id: "A", text: "Go"}, %{id: "B", text: "Gd"}, %{id: "C", text: "Au"}, %{id: "D", text: "Ag"}], correct: "C"},
+        %{id: "tg8", text: "Which ocean is the largest by surface area?", options: [%{id: "A", text: "Atlantic"}, %{id: "B", text: "Indian"}, %{id: "C", text: "Arctic"}, %{id: "D", text: "Pacific"}], correct: "D"}
       ],
       "weird_facts" => [
         %{id: "tw1", text: "Roughly what percentage of people sleep with socks on?", options: [%{id: "A", text: "10%"}, %{id: "B", text: "20%"}, %{id: "C", text: "30%"}, %{id: "D", text: "50%"}], correct: "C"},
@@ -2662,7 +2721,12 @@ defmodule VnPartyWeb.GameChannel do
       "social_stats" => [
         %{id: "ts1", text: "Most used social app globally by breadth of users?", options: [%{id: "A", text: "TikTok"}, %{id: "B", text: "Instagram"}, %{id: "C", text: "YouTube"}, %{id: "D", text: "Facebook"}], correct: "D"},
         %{id: "ts2", text: "Which age group reports the most daily screen time on average (typical surveys)?", options: [%{id: "A", text: "13–17"}, %{id: "B", text: "18–24"}, %{id: "C", text: "35–44"}, %{id: "D", text: "65+"}], correct: "B"},
-        %{id: "ts3", text: "What is the approximate world literacy rate for adults?", options: [%{id: "A", text: "55%"}, %{id: "B", text: "70%"}, %{id: "C", text: "86%"}, %{id: "D", text: "95%"}], correct: "C"}
+        %{id: "ts3", text: "What is the approximate world literacy rate for adults?", options: [%{id: "A", text: "55%"}, %{id: "B", text: "70%"}, %{id: "C", text: "86%"}, %{id: "D", text: "95%"}], correct: "C"},
+        %{id: "ts4", text: "Roughly what share of the world uses the internet (ITU estimate)?", options: [%{id: "A", text: "40%"}, %{id: "B", text: "55%"}, %{id: "C", text: "67%"}, %{id: "D", text: "90%"}], correct: "C"},
+        %{id: "ts5", text: "Which metric is commonly used to measure audience engagement on posts?", options: [%{id: "A", text: "Latency"}, %{id: "B", text: "Engagement rate"}, %{id: "C", text: "Bandwidth"}, %{id: "D", text: "Uptime"}], correct: "B"},
+        %{id: "ts6", text: "A/B testing in product teams is primarily used to…", options: [%{id: "A", text: "Compare two variants"}, %{id: "B", text: "Delete user data"}, %{id: "C", text: "Encrypt passwords"}, %{id: "D", text: "Ship hardware"}], correct: "A"},
+        %{id: "ts7", text: "Net Promoter Score (NPS) measures…", options: [%{id: "A", text: "Likelihood to recommend"}, %{id: "B", text: "CPU temperature"}, %{id: "C", text: "Packet loss"}, %{id: "D", text: "Screen resolution"}], correct: "A"},
+        %{id: "ts8", text: "In surveys, a Likert scale typically asks respondents to…", options: [%{id: "A", text: "Rate agreement on a scale"}, %{id: "B", text: "Draw a map"}, %{id: "C", text: "Measure weight"}, %{id: "D", text: "Record heart rate"}], correct: "A"}
       ],
       "science_lite" => [
         %{id: "tc1", text: "What gas do plants primarily absorb for photosynthesis?", options: [%{id: "A", text: "Oxygen"}, %{id: "B", text: "Nitrogen"}, %{id: "C", text: "Carbon Dioxide"}, %{id: "D", text: "Helium"}], correct: "C"},
