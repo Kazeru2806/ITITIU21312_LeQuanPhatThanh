@@ -105,18 +105,27 @@ async function run() {
   const opts = ["A", "B", "C", "D"];
   const start = Date.now();
 
-  const sendOne = (channel, n) => {
-    const option_id = opts[(n + Math.floor(Math.random() * 4)) % 4];
-    channel.push("submit_prediction", {
-      option_id,
-      client_timestamp_ms: Date.now(),
+  const sendOne = (channel, n) =>
+    new Promise((resolve, reject) => {
+      const option_id = opts[(n + Math.floor(Math.random() * 4)) % 4];
+      channel
+        .push("submit_prediction", {
+          option_id,
+          client_timestamp_ms: Date.now(),
+        })
+        .receive("ok", () => resolve())
+        .receive("error", (e) => reject(new Error(e?.reason || "submit_prediction error")))
+        .receive("timeout", () => reject(new Error("submit_prediction timeout")));
     });
-  };
 
   if (pattern === "round-robin") {
     for (let n = 0; n < messagesPerPlayer; n++) {
       for (const { channel } of channels) {
-        sendOne(channel, n);
+        try {
+          await sendOne(channel, n);
+        } catch (e) {
+          console.warn("prediction failed (degraded path):", e.message);
+        }
         await sleep(intervalMs);
       }
     }
@@ -124,7 +133,11 @@ async function run() {
     await Promise.all(
       channels.map(async ({ channel }) => {
         for (let n = 0; n < messagesPerPlayer; n++) {
-          sendOne(channel, n);
+          try {
+            await sendOne(channel, n);
+          } catch (e) {
+            console.warn("prediction failed (degraded path):", e.message);
+          }
           await sleep(intervalMs);
         }
       })

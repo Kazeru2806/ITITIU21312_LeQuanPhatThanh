@@ -390,17 +390,39 @@ export function useGameSocket({
         return channel.push(event, { ...payload, client_timestamp_ms: Date.now() });
     };
 
-    const pushAsync = (event: string, payload: Record<string, any> = {}) =>
+    const pushAsync = (event: string, payload: Record<string, any> = {}, timeoutMs = 12_000) =>
         new Promise((resolve, reject) => {
             const channel = channelRef.current;
             if (!channel) {
                 reject(new Error('Not connected to game server'));
                 return;
             }
+
+            let settled = false;
+            const finish = (fn: () => void) => {
+                if (settled) return;
+                settled = true;
+                fn();
+            };
+
+            const timer = window.setTimeout(() => {
+                finish(() => reject(new Error(`${event} timed out — try again`)));
+            }, timeoutMs);
+
             channel
                 .push(event, { ...payload, client_timestamp_ms: Date.now() })
-                .receive('ok', resolve)
-                .receive('error', (err: { reason?: string }) => reject(phoenixError(err)));
+                .receive('ok', (resp: unknown) => {
+                    window.clearTimeout(timer);
+                    finish(() => resolve(resp));
+                })
+                .receive('error', (err: { reason?: string }) => {
+                    window.clearTimeout(timer);
+                    finish(() => reject(phoenixError(err)));
+                })
+                .receive('timeout', () => {
+                    window.clearTimeout(timer);
+                    finish(() => reject(new Error(`${event} timed out`)));
+                });
         });
 
     const startGame = () => {

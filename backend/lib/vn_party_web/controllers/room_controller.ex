@@ -1,6 +1,7 @@
 defmodule VnPartyWeb.RoomController do
   use VnPartyWeb, :controller
   alias VnParty.Game
+  alias VnParty.TruthResults
 
   @doc """
   POST /api/rooms
@@ -173,6 +174,64 @@ defmodule VnPartyWeb.RoomController do
           end)
 
         json(conn, %{success: true, room_code: room.code, anchors: anchors})
+    end
+  end
+
+  @doc """
+  POST /api/rooms/:code/truth_results_ready
+  HTTP fallback when WebSocket push fails (mobile / flaky networks).
+  Body: %{ "player_id" => "...", "round" => optional_int }
+  """
+  def truth_results_ready(conn, %{"code" => code} = params) do
+    player_id = Map.get(params, "player_id")
+
+    cond do
+      not is_binary(player_id) or player_id == "" ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{success: false, error: "player_id required"})
+
+      true ->
+        case Game.get_room_by_code(code) do
+          nil ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{success: false, error: "Room not found"})
+
+          room ->
+            case Game.get_player(player_id) do
+              %VnParty.Game.Player{room_id: rid} when rid == room.id ->
+                round =
+                  case Map.get(params, "round") do
+                    r when is_integer(r) ->
+                      r
+
+                    r when is_binary(r) ->
+                      case Integer.parse(r) do
+                        {n, _} -> n
+                        _ -> room.current_round
+                      end
+
+                    _ ->
+                      room.current_round
+                  end
+
+                case TruthResults.record_results_ready(room.id, player_id, round) do
+                  {:ok, body} ->
+                    json(conn, Map.put(body, :success, true))
+
+                  {:error, reason} ->
+                    conn
+                    |> put_status(:unprocessable_entity)
+                    |> json(%{success: false, error: reason})
+                end
+
+              _ ->
+                conn
+                |> put_status(:forbidden)
+                |> json(%{success: false, error: "Player not in this room"})
+            end
+        end
     end
   end
 

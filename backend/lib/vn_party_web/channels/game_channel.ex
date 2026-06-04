@@ -1,6 +1,7 @@
 defmodule VnPartyWeb.GameChannel do
   use VnPartyWeb, :channel
   alias VnParty.Game
+  alias VnParty.TruthResults
   alias VnParty.Game.Presence
   alias VnParty.Game.DistortionRules
   alias VnParty.Game.AnswerCommit
@@ -583,39 +584,14 @@ defmodule VnPartyWeb.GameChannel do
             nil
         end
 
-      record_truth_results_ready(socket, room_id, round, player_id, distortion_note)
-    end
-  end
+      case TruthResults.record_results_ready(room_id, player_id, round) do
+        {:ok, body} ->
+          {:reply, {:ok, Map.put(body, :distortion_note, distortion_note)}, socket}
 
-  defp record_truth_results_ready(socket, _room, room_id, round, player_id, distortion_note \\ nil) do
-      :ets.insert(:truth_results_ack, {{room_id, round, player_id}, true})
-
-      players = Game.list_players(room_id)
-      connected = Enum.filter(players, & &1.connected)
-
-      acked_ids =
-        Enum.filter(connected, fn p ->
-          case :ets.lookup(:truth_results_ack, {room_id, round, p.id}) do
-            [_] -> true
-            [] -> false
-          end
-        end)
-        |> Enum.map(& &1.id)
-
-      progress = %{
-        round: round,
-        acked_count: length(acked_ids),
-        total: length(connected),
-        acked_player_ids: acked_ids
-      }
-
-      broadcast_to_both(socket, "truth_results_progress", progress, "display:truth_results_progress", progress)
-
-      if length(connected) > 0 and length(acked_ids) >= length(connected) do
-        PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:auto_advance_round, room_id, round})
+        {:error, reason} ->
+          {:reply, {:error, %{reason: reason}}, socket}
       end
-
-      {:reply, {:ok, %{received: true, distortion_note: distortion_note}}, socket}
+    end
   end
 
   defp apply_distortion_for_player(socket, room, phase, action, dist_payload) do
@@ -2559,6 +2535,11 @@ defmodule VnPartyWeb.GameChannel do
 
   defp truth_score_round(room, round, _question_id, socket) do
     room_id = room.id
+    score_key = {:truth_score_broadcast, room_id, round}
+
+    if not :ets.insert_new(:round_scored, {score_key, true}) do
+      {:noreply, socket}
+    else
     truth_clear_results_acks(room_id, round)
 
     {question, effects} =
@@ -2697,9 +2678,9 @@ defmodule VnPartyWeb.GameChannel do
     initial_progress = %{round: round, acked_count: 0, total: length(connected_players), acked_player_ids: []}
     broadcast_to_both(socket, "truth_results_progress", initial_progress, "display:truth_results_progress", initial_progress)
 
-    truth_clear_results_acks(room_id, round)
     schedule_results_auto_advance(room_id, round)
     {:noreply, socket}
+    end
   end
 
   defp top_realities([]), do: []

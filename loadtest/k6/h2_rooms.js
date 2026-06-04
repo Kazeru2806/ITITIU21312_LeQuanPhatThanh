@@ -3,8 +3,25 @@ import ws from "k6/ws";
 import { check, sleep } from "k6";
 import { Trend, Rate } from "k6/metrics";
 
-const apiBase = __ENV.API_BASE || "http://127.0.0.1:4000/api";
-const wsBase = __ENV.WS_BASE || "ws://127.0.0.1:4000/socket/websocket";
+const apiBase = __ENV.API_BASE || "";
+const wsBase = __ENV.WS_BASE || "";
+const allowLocal = __ENV.ALLOW_LOCALHOST === "1";
+
+function assertProductionTargets() {
+  if (!apiBase || !wsBase) {
+    throw new Error(
+      "H2 requires API_BASE and WS_BASE (Render production URLs). Example: API_BASE=https://your-app.onrender.com/api WS_BASE=wss://your-app.onrender.com/socket/websocket"
+    );
+  }
+  const local = /127\.0\.0\.1|localhost/i.test(apiBase) || /127\.0\.0\.1|localhost/i.test(wsBase);
+  if (local && !allowLocal) {
+    throw new Error(
+      "H2 thesis runs must target deployed backend, not localhost. Set ALLOW_LOCALHOST=1 only for dev smoke tests."
+    );
+  }
+}
+
+assertProductionTargets();
 const minPlayers = Number(__ENV.MIN_PLAYERS || "4");
 const maxPlayers = Number(__ENV.MAX_PLAYERS || "8");
 

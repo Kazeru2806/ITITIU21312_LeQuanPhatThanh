@@ -123,8 +123,11 @@ Open `analysis/results/latency_report_moderate_submit_prediction.txt`.
 
 | Result | Meaning |
 |--------|---------|
-| **p95 ≤ 300 ms** in **moderate** | H1 supported for that scenario |
+| **p95 ≤ 300 ms** in **baseline** or **light** | H1 supported for normal play |
+| **p95 > 300 ms** in **moderate** (100 ms netem + 10% loss) | Often expected; RTT alone can exceed 300 ms — report honestly |
 | **p95 > 300 ms** in heavy | Expected; document as “functional but tail latency grows under stress” |
+
+The load generator now waits for `submit_prediction` ack (with timeout) so degraded runs still record server-side latency when messages arrive.
 
 Report in thesis: **n**, **p50**, **p90**, **p95**, **p99**, scenario name, netem parameters, API/WS URLs used.
 

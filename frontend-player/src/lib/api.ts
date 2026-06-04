@@ -81,6 +81,28 @@ class ApiClient {
       { method: 'POST', body: '{}' }
     );
   }
+
+  /** HTTP fallback when WebSocket truth_results_ready push fails. */
+  async truthResultsReady(
+    roomCode: string,
+    playerId: string,
+    round?: number
+  ): Promise<{
+    success: boolean;
+    received?: boolean;
+    already_ready?: boolean;
+    distortion_note?: string | null;
+    progress?: { acked_count: number; total: number; acked_player_ids: string[] };
+    error?: string;
+  }> {
+    return this.request(`/rooms/${roomCode.toUpperCase()}/truth_results_ready`, {
+      method: 'POST',
+      body: JSON.stringify({
+        player_id: playerId,
+        ...(round != null ? { round } : {}),
+      }),
+    });
+  }
 }
 
 export const api = new ApiClient();

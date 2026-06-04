@@ -8,9 +8,37 @@ defmodule VnParty.Telemetry do
   alias VnParty.Telemetry.LatencyMeasurement
 
   def record_latency(attrs) when is_map(attrs) do
-    %LatencyMeasurement{}
-    |> LatencyMeasurement.changeset(attrs)
-    |> Repo.insert()
+    insert_with_retry(attrs, 3)
+  end
+
+  defp insert_with_retry(_attrs, 0), do: {:error, :max_retries}
+
+  defp insert_with_retry(attrs, attempts_left) do
+    result =
+      %LatencyMeasurement{}
+      |> LatencyMeasurement.changeset(attrs)
+      |> Repo.insert()
+
+    case result do
+      {:ok, _} = ok ->
+        ok
+
+      {:error, _} = err ->
+        if attempts_left > 1 do
+          Process.sleep(50)
+          insert_with_retry(attrs, attempts_left - 1)
+        else
+          err
+        end
+    end
+  rescue
+    _e ->
+      if attempts_left > 1 do
+        Process.sleep(50)
+        insert_with_retry(attrs, attempts_left - 1)
+      else
+        {:error, :insert_failed}
+      end
   end
 
   def list_latency(opts \\ []) do

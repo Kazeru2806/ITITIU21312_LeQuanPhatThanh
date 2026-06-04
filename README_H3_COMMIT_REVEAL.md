@@ -27,10 +27,19 @@ This runs **400 controlled attempts** (4 scenarios × 100 each) by calling `Game
 
 ### Layer B — Independent verification (black-box / audit)
 
+Automated (run with Layer A):
+
+```bash
+cd backend
+MIX_ENV=test mix test test/h3_ws_commit_test.exs test/truth_results_test.exs --trace
+```
+
+`h3_ws_commit_test.exs` exercises **replay**, **late commit**, and **hash tampering** through `Game.commit_answer_secure/5` — the same enforcement the WebSocket `commit_answer` handler uses (not a separate mock).
+
 After real games on Render:
 
 1. **Audit API:** `GET /api/rooms/:code/audit` — hash chain in `blockchain_anchors`
-2. **Manual tamper attempt:** Try to POST a commit with a mismatched hash via API (should be rejected)
+2. **Results ready fallback:** `POST /api/rooms/:code/truth_results_ready` with `{ "player_id": "..." }` if mobile WebSocket push fails
 3. **DB tamper detection:** If someone edits `answer_commits` in Postgres, reveal/score must flag `hash_tampering`
 
 **What this proves:** The running system + audit trail align with the protocol design.

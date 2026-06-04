@@ -13,6 +13,7 @@ interface TruthDistortionPanelProps {
   fakeOptionText: string;
   fakePreview: { category_label?: string; text?: string } | null;
   readySent: boolean;
+  readySubmitting?: boolean;
   readyProgress: { acked: number; total: number } | null;
   doneLabel: string;
   doneLabelWithPower?: string;
@@ -34,6 +35,7 @@ export function TruthDistortionPanel({
   fakeOptionText,
   fakePreview,
   readySent,
+  readySubmitting = false,
   readyProgress,
   doneLabel,
   doneLabelWithPower = 'Confirm power & ready',
@@ -166,18 +168,20 @@ export function TruthDistortionPanel({
         ) : null}
         <button
           type="button"
-          disabled={readySent}
+          disabled={readySent || readySubmitting}
           onClick={() => {
-            if (readySent) return;
+            if (readySent || readySubmitting) return;
             onDone();
           }}
-          className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg touch-manipulation cursor-pointer"
+          className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg touch-manipulation cursor-pointer relative z-30"
         >
-          {readySent
-            ? 'Waiting for other players…'
-            : pendingDistortion && !distortionLocked
-              ? doneLabelWithPower
-              : doneLabel}
+          {readySubmitting
+            ? 'Sending…'
+            : readySent
+              ? 'Waiting for other players…'
+              : pendingDistortion && !distortionLocked
+                ? doneLabelWithPower
+                : doneLabel}
         </button>
         <p className="text-xs text-gray-600 mt-2 text-center">
           Tap Done anytime. If you picked a power, Done confirms it and marks you ready. Everyone ready skips the wait.
