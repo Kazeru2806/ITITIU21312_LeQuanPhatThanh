@@ -396,20 +396,18 @@ defmodule VnPartyWeb.GameChannel do
             {:reply, {:error, %{reason: reason}}, socket}
 
           {:ok, cleaned_payload} ->
-            effect_round = distortion_effect_round(room, phase)
-
             DistortionRules.record_use!(room.id, player_id, action)
             update_truth_stats(player_id, fn s -> %{s | charges: max(0, s.charges - cost), di: s.di + cost * 10} end)
-            :ets.insert(:truth_distortions, {socket.assigns.room_id, effect_round, player_id, action, cleaned_payload})
+            :ets.insert(:truth_distortions, {socket.assigns.room_id, room.current_round, player_id, action, cleaned_payload})
 
             Game.create_event(room.id, "distortion_used", %{
               action: action,
-              round: effect_round,
+              round: room.current_round,
               payload: cleaned_payload
             }, player_id)
 
             log_payload = %{
-              round: effect_round,
+              round: room.current_round,
               player_id: player_id,
               nickname: socket.assigns.nickname,
               action: action,
@@ -451,9 +449,7 @@ defmodule VnPartyWeb.GameChannel do
         {:reply, {:error, %{reason: "No next round available"}}, socket}
 
       true ->
-        phase = current_truth_phase(room.id)
-        effect_round = distortion_effect_round(room, phase)
-        lock_key = {room.id, effect_round, player_id}
+        lock_key = {room.id, room.current_round, player_id}
         stats = get_truth_stats(player_id)
         cost = distortion_cost("inject_fake_option")
 
@@ -511,9 +507,7 @@ defmodule VnPartyWeb.GameChannel do
     %{"fake_text" => fake_text} = payload
     room = Game.get_room!(socket.assigns.room_id)
     player_id = socket.assigns.player_id
-    phase = current_truth_phase(room.id)
-    effect_round = distortion_effect_round(room, phase)
-    lock_key = {room.id, effect_round, player_id}
+    lock_key = {room.id, room.current_round, player_id}
     maybe_record_latency(socket, "set_fake_option_text", payload, %{})
 
     if Game.room_mode(room) != "truth_collapse" do
@@ -529,21 +523,18 @@ defmodule VnPartyWeb.GameChannel do
               {:reply, {:error, %{reason: reason}}, socket}
 
             {:ok, cleaned_payload} ->
-              phase = current_truth_phase(room.id)
-              effect_round = distortion_effect_round(room, phase)
-
               DistortionRules.record_use!(room.id, player_id, "inject_fake_option")
-              :ets.insert(:truth_distortions, {room.id, effect_round, player_id, "inject_fake_option", cleaned_payload})
+              :ets.insert(:truth_distortions, {room.id, room.current_round, player_id, "inject_fake_option", cleaned_payload})
               :ets.delete(:truth_fake_locks, lock_key)
 
               Game.create_event(room.id, "distortion_used", %{
                 action: "inject_fake_option",
-                round: effect_round,
+                round: room.current_round,
                 payload: cleaned_payload
               }, player_id)
 
               log_payload = %{
-                round: effect_round,
+                round: room.current_round,
                 player_id: player_id,
                 nickname: socket.assigns.nickname,
                 action: "inject_fake_option",
@@ -1299,15 +1290,6 @@ defmodule VnPartyWeb.GameChannel do
     :ok
   end
 
-  # Discussion distortions apply to the current round; results-screen distortions apply to the next round.
-  defp distortion_effect_round(room, "discussion"), do: room.current_round
-
-  defp distortion_effect_round(room, "results") do
-    min(room.current_round + 1, room.total_rounds)
-  end
-
-  defp distortion_effect_round(room, _), do: room.current_round
-
   defp question_time_limit(room) do
     # Classic mode has fixed 15s in mock questions; Truth mode is per-question and stored in commit_windows.
     if Game.room_mode(room) == "truth_collapse" do
@@ -1914,7 +1896,6 @@ defmodule VnPartyWeb.GameChannel do
 
         Map.merge(base, %{
           discussion_seconds: left,
-          phase_ends_at_ms: System.system_time(:millisecond) + left * 1000,
           question_id: q2.id,
           category: q2.category,
           category_label: truth_category_label(q2.category),
@@ -2070,12 +2051,13 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   defp apply_distortions_for_round(room_id, round, question) do
-    # Distortions are stored with `distortion_effect_round/2` (discussion → current round, results → next).
+    prior_round = round - 1
+
     distortions_raw =
       :ets.lookup(:truth_distortions, room_id)
       |> Enum.flat_map(fn
-        {^room_id, ^round, pid, action, payload} ->
-          [%{round: round, player_id: pid, action: action, payload: payload, di: get_truth_stats(pid).di}]
+        {^room_id, ^prior_round, pid, action, payload} ->
+          [%{round: prior_round, player_id: pid, action: action, payload: payload, di: get_truth_stats(pid).di}]
 
         _ ->
           []
