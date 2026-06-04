@@ -1,13 +1,12 @@
 defmodule VnPartyWeb.Router do
   use VnPartyWeb, :router
 
+  pipeline :api do
+  plug :accepts, ["json"]
   plug CORSPlug, origin: [
     "https://vn-party-thesis.vercel.app",
     "https://vn-party-thesis-host.vercel.app"
   ]
-
-  pipeline :api do
-    plug :accepts, ["json"]
   end
 
   scope "/api", VnPartyWeb do
