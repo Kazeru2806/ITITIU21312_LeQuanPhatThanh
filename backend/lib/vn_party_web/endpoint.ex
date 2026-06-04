@@ -52,11 +52,13 @@ defmodule VnPartyWeb.Endpoint do
   # CORS - Allow requests from frontend
   # In development, allow all origins for easier testing (including local network IPs)
   plug CORSPlug,
-    origin: if(Application.compile_env(:vn_party, :dev_routes), do: "*", else: [
-      "http://localhost:5173", 
-      "http://localhost:5174", 
-      "http://localhost:5175"
-    ]),
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:5175",
+      "https://vn-party-thesis.vercel.app",
+      "https://vn-party-thesis-host.vercel.app"
+    ],
     headers: ["Authorization", "Content-Type", "Accept", "Origin"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
 
