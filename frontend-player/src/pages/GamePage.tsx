@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '../store/gameStore';
 import { useGameSocket } from '../hooks/useGameSocket';
@@ -37,6 +37,7 @@ export function GamePage() {
     const [resultsReadyProgress, setResultsReadyProgress] = useState<{ acked: number; total: number } | null>(null);
     const [discussionReadySent, setDiscussionReadySent] = useState(false);
     const [discussionReadyProgress, setDiscussionReadyProgress] = useState<{ acked: number; total: number } | null>(null);
+    const powerPhaseLockRef = useRef(false);
 
     const {
         playerId,
@@ -58,28 +59,51 @@ export function GamePage() {
         setGameState,
     } = useGameStore();
 
-    const timeLeft = usePhaseTimer(
-        phase === 'answering' ? phaseEndsAtMs : null,
-        currentQuestion?.time_limit ?? 15
+    const powerPhaseActive = mode === 'truth_collapse' && (phase === 'results' || showResult);
+
+    const enterPowerResultsPhase = useCallback(
+        (endsAtMs?: number) => {
+            powerPhaseLockRef.current = true;
+            setPhase('results');
+            setShowResult(true);
+            setQuestion(null);
+            setHasCommitted(false);
+            setPhaseEndsAtMs(endsAtMs ?? Date.now() + 45 * 1000);
+        },
+        [setQuestion, setHasCommitted]
     );
-    const discussionLeft = usePhaseTimer(phase === 'discussion' ? phaseEndsAtMs : null, 15);
-    const resultsLeft = usePhaseTimer(phase === 'results' ? phaseEndsAtMs : null, 45);
+
+    const timeLeft = usePhaseTimer(
+        phase === 'answering' && !powerPhaseActive ? phaseEndsAtMs : null,
+        currentQuestion?.time_limit ?? 15,
+        phase === 'answering' && !powerPhaseActive
+    );
+    const discussionLeft = usePhaseTimer(phase === 'discussion' ? phaseEndsAtMs : null, 15, phase === 'discussion');
+    const resultsLeft = usePhaseTimer(
+        powerPhaseActive ? phaseEndsAtMs : null,
+        45,
+        powerPhaseActive
+    );
 
     useEffect(() => {
         if (phase === 'discussion' && !phaseEndsAtMs) {
             setPhaseEndsAtMs(Date.now() + 15 * 1000);
         }
-        if (phase === 'results' && !phaseEndsAtMs) {
-            setPhaseEndsAtMs(Date.now() + 45 * 1000);
-        }
     }, [phase, phaseEndsAtMs]);
 
-    // Safety net: round_scored can set showResult before phase flips; never keep answering UI (120s timer).
     useEffect(() => {
-        if (mode !== 'truth_collapse' || !showResult) return;
-        setPhase('results');
-        setQuestion(null);
-    }, [mode, showResult]);
+        if (!powerPhaseActive) return;
+        if (!phaseEndsAtMs || phaseEndsAtMs <= Date.now()) {
+            setPhaseEndsAtMs(Date.now() + 45 * 1000);
+        }
+    }, [powerPhaseActive, phaseEndsAtMs]);
+
+    useEffect(() => {
+        if (phase !== 'answering' || powerPhaseActive || !currentQuestion) return;
+        if (!phaseEndsAtMs) {
+            setPhaseEndsAtMs(Date.now() + (currentQuestion.time_limit ?? 15) * 1000);
+        }
+    }, [phase, powerPhaseActive, currentQuestion, phaseEndsAtMs]);
 
     // Keep the players list in sync when selecting distortions on results screen.
     useEffect(() => {
@@ -218,6 +242,7 @@ export function GamePage() {
             return;
         }
         if (resume.phase === 'results') {
+            powerPhaseLockRef.current = true;
             setPhase('results');
             setShowResult(true);
             setQuestion(null);
@@ -289,6 +314,7 @@ export function GamePage() {
             setDiscussionReadyProgress(null);
         },
         onDiscussionStarted: (data) => {
+            powerPhaseLockRef.current = false;
             if (data.mode) setMode(data.mode as any);
             setPhase('discussion');
             setQuestion(null);
@@ -320,6 +346,9 @@ export function GamePage() {
             setDiscussionReadyProgress(null);
         },
         onQuestionRevealed: (question) => {
+            if (powerPhaseLockRef.current) {
+                return;
+            }
             console.log('❓ Question revealed:', question);
             const removeMap = (question as any).remove_targets as Record<string, string[]> | undefined;
             const pid = useGameStore.getState().playerId;
@@ -385,18 +414,13 @@ export function GamePage() {
         },
         onRoundScored: (data) => {
             console.log('Round scored (player view):', data);
-            const scored = data as {
-                phase?: string;
-                phase_ends_at_ms?: number;
-                results_seconds?: number;
-            };
-            setShowResult(true);
-            setPhase(scored.phase === 'results' ? 'results' : 'results');
-            setQuestion(null);
-            setPhaseEndsAtMs(
-                scored.phase_ends_at_ms ??
-                    Date.now() + (scored.results_seconds ?? 45) * 1000
-            );
+            if (data.mode === 'truth_collapse') {
+                setMode('truth_collapse');
+            }
+            const endsAt =
+                data.phase_ends_at_ms ??
+                Date.now() + (data.results_seconds ?? 45) * 1000;
+            enterPowerResultsPhase(endsAt);
             if (data?.stats) setTruthStats(data.stats);
             setPendingDistortion(null);
             setDistortionLocked(false);
@@ -414,6 +438,8 @@ export function GamePage() {
         },
         onRoundStarted: (data: any) => {
             console.log('Round started:', data);
+            powerPhaseLockRef.current = false;
+            if (data.mode) setMode(data.mode as 'classic' | 'truth_collapse');
             setRound(data.round, data.total_rounds);
             setShowResult(false);
             setHasCommitted(false);
@@ -442,8 +468,21 @@ export function GamePage() {
                 }
             }
         },
+        onTruthResultsPhase: (data) => {
+            if (data.mode) setMode('truth_collapse');
+            enterPowerResultsPhase(data.phase_ends_at_ms);
+            setResultsReadySent(false);
+            const connected = useGameStore.getState().players.filter((p) => p.connected).length;
+            setResultsReadyProgress({
+                acked: 0,
+                total: connected || useGameStore.getState().players.length || 0,
+            });
+        },
         onTruthResultsProgress: (data) => {
             setResultsReadyProgress({ acked: data.acked_count, total: data.total });
+            if (useGameStore.getState().mode === 'truth_collapse' && !powerPhaseLockRef.current) {
+                enterPowerResultsPhase();
+            }
         },
         onTruthDiscussionProgress: (data) => {
             setDiscussionReadyProgress({ acked: data.acked_count, total: data.total });
@@ -520,7 +559,10 @@ export function GamePage() {
         if (discussionReadySent) return;
         try {
             const payload = buildDistortionPayload() ?? {};
-            const res = (await truthDiscussionReady(payload)) as { distortion_note?: string };
+            const raw = await truthDiscussionReady(payload);
+            const res = (raw && typeof raw === 'object' && 'response' in raw
+                ? (raw as { response: { distortion_note?: string } }).response
+                : raw) as { distortion_note?: string };
             setDiscussionReadySent(true);
             if (pendingDistortion && !res?.distortion_note) {
                 setDistortionLocked(true);
@@ -542,7 +584,10 @@ export function GamePage() {
         if (resultsReadySent) return;
         try {
             const payload = buildDistortionPayload() ?? {};
-            const res = (await truthResultsReady(payload)) as { distortion_note?: string };
+            const raw = await truthResultsReady(payload);
+            const res = (raw && typeof raw === 'object' && 'response' in raw
+                ? (raw as { response: { distortion_note?: string } }).response
+                : raw) as { distortion_note?: string };
             setResultsReadySent(true);
             if (pendingDistortion && !res?.distortion_note) {
                 setDistortionLocked(true);
@@ -791,7 +836,7 @@ export function GamePage() {
         );
     }
 
-    if (mode === 'truth_collapse' && (phase === 'results' || showResult)) {
+    if (powerPhaseActive) {
         return (
             <div className="min-h-screen relative overflow-hidden flex flex-col p-4 lg:p-6">
                 {roomClosed && (

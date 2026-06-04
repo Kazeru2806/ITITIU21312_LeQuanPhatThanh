@@ -167,15 +167,11 @@ export function TruthDistortionPanel({
         <button
           type="button"
           disabled={readySent}
-          onPointerDown={(e) => {
+          onClick={() => {
             if (readySent) return;
-            e.preventDefault();
             onDone();
           }}
-          onClick={(e) => {
-            e.preventDefault();
-          }}
-          className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg touch-manipulation"
+          className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg touch-manipulation cursor-pointer"
         >
           {readySent
             ? 'Waiting for other players…'

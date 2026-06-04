@@ -66,6 +66,9 @@ interface RoundScoredData {
     round: number;
     mode?: string;
     message?: string;
+    phase?: string;
+    phase_ends_at_ms?: number;
+    results_seconds?: number;
     stats?: Array<{ player_id: string; tp: number; di: number; ps: number; charges: number }>;
 }
 
@@ -120,6 +123,13 @@ interface UseGameSocketProps {
         total: number;
         acked_player_ids: string[];
     }) => void;
+    onTruthResultsPhase?: (data: {
+        round: number;
+        phase: string;
+        phase_ends_at_ms: number;
+        results_seconds: number;
+        mode?: string;
+    }) => void;
     onTruthResume?: (resume: TruthResume) => void;
     onPlayersSync?: (data: {
         players: PlayerJoinedData['players'];
@@ -151,6 +161,7 @@ export function useGameSocket({
     onRematchCancelled,
     onTruthResultsProgress,
     onTruthDiscussionProgress,
+    onTruthResultsPhase,
     onTruthResume,
     onPlayersSync,
     onHostChanged,
@@ -188,6 +199,7 @@ export function useGameSocket({
         onRematchCancelled,
         onTruthResultsProgress,
         onTruthDiscussionProgress,
+        onTruthResultsPhase,
         onTruthResume,
         onPlayersSync,
         onHostChanged,
@@ -308,6 +320,10 @@ export function useGameSocket({
 
         channel.on('truth_results_progress', (data: any) => {
             truthProgressRef.current?.(data);
+        });
+
+        channel.on('truth_results_phase', (data: any) => {
+            cbRef.current.onTruthResultsPhase?.(data);
         });
 
         channel.on('truth_discussion_progress', (data: any) => {

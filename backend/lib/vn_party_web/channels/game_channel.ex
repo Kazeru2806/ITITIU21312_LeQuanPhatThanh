@@ -2683,6 +2683,16 @@ defmodule VnPartyWeb.GameChannel do
 
     broadcast_to_both(socket, "round_scored", player_payload, "display:round_scored", final_payload)
 
+    phase_payload = %{
+      round: round,
+      phase: "results",
+      phase_ends_at_ms: results_ends_at,
+      results_seconds: @results_phase_seconds,
+      mode: "truth_collapse"
+    }
+
+    broadcast!(socket, "truth_results_phase", phase_payload)
+
     # Immediately sync "ready" counter so all clients show the same baseline.
     initial_progress = %{round: round, acked_count: 0, total: length(connected_players), acked_player_ids: []}
     broadcast_to_both(socket, "truth_results_progress", initial_progress, "display:truth_results_progress", initial_progress)
