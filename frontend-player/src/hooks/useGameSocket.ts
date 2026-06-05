@@ -147,76 +147,19 @@ interface UseGameSocketProps {
     }) => void;
 }
 
-export function useGameSocket({
-    roomCode,
-    playerId,
-    nickname,
-    onGameState,
-    onPlayerJoined,
-    onPlayerDisconnected,
-    onGameStarted,
-    onDiscussionStarted,
-    onQuestionRevealed,
-    onPlayerCommitted,
-    onAnswerRevealed,
-    onRoundScored,
-    onRoundStarted,
-    onGameEnded,
-    onTruthStatsUpdated,
-    onDistortionUsed,
-    onRematchVoteUpdated,
-    onRematchStarting,
-    onRematchCancelled,
-    onTruthResultsProgress,
-    onTruthDiscussionProgress,
-    onTruthResultsPhase,
-    onAnsweringTimerUpdate,
-    onTruthResume,
-    onPlayersSync,
-    onHostChanged,
-    onRoomClosed,
-    onRoomResetToLobby,
-}: UseGameSocketProps) {
+export function useGameSocket(props: UseGameSocketProps) {
+    const { roomCode, playerId, nickname } = props;
     const [connected, setConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const socketRef = useRef<Socket | null>(null);
     const channelRef = useRef<Channel | null>(null);
-    const truthProgressRef = useRef(onTruthResultsProgress);
-    truthProgressRef.current = onTruthResultsProgress;
-    const truthResumeRef = useRef(onTruthResume);
-    truthResumeRef.current = onTruthResume;
-    const cbRef = useRef<UseGameSocketProps>({ roomCode, playerId, nickname });
-    cbRef.current = {
-        roomCode,
-        playerId,
-        nickname,
-        onGameState,
-        onPlayerJoined,
-        onPlayerDisconnected,
-        onGameStarted,
-        onDiscussionStarted,
-        onQuestionRevealed,
-        onPlayerCommitted,
-        onAnswerRevealed,
-        onRoundScored,
-        onRoundStarted,
-        onGameEnded,
-        onTruthStatsUpdated,
-        onDistortionUsed,
-        onRematchVoteUpdated,
-        onRematchStarting,
-        onRematchCancelled,
-        onTruthResultsProgress,
-        onTruthDiscussionProgress,
-        onTruthResultsPhase,
-        onAnsweringTimerUpdate,
-        onTruthResume,
-        onPlayersSync,
-        onHostChanged,
-        onRoomClosed,
-        onRoomResetToLobby,
-    };
+    const truthProgressRef = useRef(props.onTruthResultsProgress);
+    truthProgressRef.current = props.onTruthResultsProgress;
+    const truthResumeRef = useRef(props.onTruthResume);
+    truthResumeRef.current = props.onTruthResume;
+    const cbRef = useRef<UseGameSocketProps>(props);
+    cbRef.current = props;
 
     useEffect(() => {
         // Create socket connection

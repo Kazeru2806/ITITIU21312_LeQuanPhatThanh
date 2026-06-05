@@ -528,6 +528,14 @@ export function GamePage() {
             }
             setTimeout(() => navigate('/results'), 2000);
         },
+        onRoomResetToLobby: (data) => {
+            if (data?.players) useGameStore.getState().setPlayers(data.players as any);
+            if (data?.total_rounds != null) setRound(0, data.total_rounds);
+            setGameState('lobby');
+            setQuestion(null);
+            setPhase('discussion');
+            navigate('/lobby');
+        },
     });
 
     // Questions are now automatically requested by the server
