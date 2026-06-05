@@ -57,8 +57,7 @@ defmodule VnParty.Game.DistortionRules do
   end
 
   def clear_room(room_id) when is_binary(room_id) do
-    :ets.match_delete(:distortion_usage, {room_id, :_, :_})
-    :ets.match_delete(:distortion_usage, {room_id, :total, :_})
+    :ets.match_delete(:distortion_usage, {{room_id, :_, :_}, :_})
     :ok
   end
 

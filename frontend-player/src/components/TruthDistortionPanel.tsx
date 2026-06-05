@@ -4,6 +4,7 @@ type DistortionAction = 'remove_option' | 'swap_category' | 'force_blind' | 'inj
 
 interface TruthDistortionPanelProps {
   myCharges: number;
+  myPlayerId?: string;
   players: Player[];
   pendingDistortion: DistortionAction | null;
   distortionTarget: string;
@@ -26,6 +27,7 @@ interface TruthDistortionPanelProps {
 
 export function TruthDistortionPanel({
   myCharges,
+  myPlayerId,
   players,
   pendingDistortion,
   distortionTarget,
@@ -143,6 +145,7 @@ export function TruthDistortionPanel({
           <p className="text-sm font-bold text-purple-800 mb-2">Choose target player (required)</p>
           <div className="grid grid-cols-2 gap-2">
             {players
+              .filter((p) => p.id !== myPlayerId)
               .slice()
               .sort((a, b) => a.nickname.localeCompare(b.nickname))
               .map((p) => (

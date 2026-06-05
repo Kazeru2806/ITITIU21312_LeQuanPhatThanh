@@ -1033,6 +1033,7 @@ export function GamePage() {
                         </div>
                         <TruthDistortionPanel
                             myCharges={myCharges}
+                            myPlayerId={playerId ?? undefined}
                             players={players}
                             pendingDistortion={pendingDistortion}
                             distortionTarget={distortionTarget}
