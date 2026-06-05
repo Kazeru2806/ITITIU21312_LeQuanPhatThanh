@@ -5,7 +5,7 @@ defmodule VnParty.Game.DistortionRules do
   """
 
   @max_remove_per_player 1
-  @max_remove_total 3
+  @max_remove_total 8
   @max_swap_per_player 2
   @max_swap_per_room 4
   @max_force_blind_per_player 1

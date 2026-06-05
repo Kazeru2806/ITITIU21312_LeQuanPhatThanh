@@ -214,9 +214,15 @@ export function GamePage() {
         }
         if (resume.phase === 'answering' && resume.current_question) {
             const cq = resume.current_question;
+            const personalized = (cq as any).personalized_options as Record<string, string[]> | undefined;
             const removeMap = (cq as any).remove_targets as Record<string, string[]> | undefined;
-            const blocked = new Set((playerId && removeMap?.[playerId]) || []);
-            const optIds = (cq.options || []).filter((o) => !blocked.has(o));
+            const optIds =
+                playerId && personalized?.[playerId]?.length
+                    ? personalized[playerId]
+                    : (() => {
+                          const blocked = new Set((playerId && removeMap?.[playerId]) || []);
+                          return (cq.options || []).filter((o) => !blocked.has(o));
+                      })();
             const q = {
                 id: cq.id,
                 options: optIds,
@@ -363,14 +369,22 @@ export function GamePage() {
         onQuestionRevealed: (question) => {
             powerPhaseLockRef.current = false;
             console.log('❓ Question revealed:', question);
-            const removeMap = (question as any).remove_targets as Record<string, string[]> | undefined;
             const pid = useGameStore.getState().playerId;
-            const blocked = new Set((pid && removeMap?.[pid]) || []);
-            const rawOpts = (question.options as any[]) || [];
-            const filteredOpts = rawOpts.filter((o) => {
-                const id = typeof o === 'string' ? o : o?.id;
-                return !blocked.has(id);
-            });
+            const personalized = (question as any).personalized_options as
+                | Record<string, string[]>
+                | undefined;
+            const removeMap = (question as any).remove_targets as Record<string, string[]> | undefined;
+
+            let filteredOpts: string[];
+            if (pid && personalized?.[pid]?.length) {
+                filteredOpts = personalized[pid];
+            } else {
+                const blocked = new Set((pid && removeMap?.[pid]) || []);
+                const rawOpts = (question.options as any[]) || [];
+                filteredOpts = rawOpts
+                    .map((o) => (typeof o === 'string' ? o : o?.id))
+                    .filter((id): id is string => !!id && !blocked.has(id));
+            }
 
             const q = { ...question, options: filteredOpts };
             setQuestion(q);

@@ -932,14 +932,7 @@ defmodule VnPartyWeb.GameChannel do
 
       merged = merge_realities_used?(room_id, round)
 
-      player_question = %{
-        id: question.id,
-        options: Enum.map(question.options, & &1.id),
-        time_limit: question.time_limit,
-        # Treat force_blind as "shuffle answers" on player devices (host still sees stable layout)
-        shuffle_targets: MapSet.to_list(effects.blind_targets),
-        remove_targets: Map.get(effects, :remove_targets, %{})
-      }
+      player_question = build_player_question_payload(room_id, question, effects)
 
       display_payload =
         Map.merge(question, %{
@@ -1520,7 +1513,6 @@ defmodule VnPartyWeb.GameChannel do
 
     # Ensure stale dedupe flags from previous runs cannot block answering transition.
     :ets.delete(:round_scored, {{:truth_q_started, room.id, round}, true})
-    :ets.delete(:round_scored, {:truth_q_started, room.id, round})
     clear_truth_discussion_acks(room.id, round)
 
     {question, effects} = prepare_truth_round_question(room, round)
@@ -1974,6 +1966,29 @@ defmodule VnPartyWeb.GameChannel do
     room_id |> Game.list_players() |> Enum.count(& &1.connected)
   end
 
+  defp build_player_question_payload(room_id, question, effects) do
+    all_ids = Enum.map(question.options, & &1.id)
+    remove_targets = Map.get(effects, :remove_targets, %{})
+    shuffle_targets = MapSet.to_list(effects.blind_targets)
+
+    personalized_options =
+      room_id
+      |> Game.list_players()
+      |> Enum.into(%{}, fn p ->
+        hidden = Map.get(remove_targets, p.id, [])
+        {p.id, Enum.reject(all_ids, &(&1 in hidden))}
+      end)
+
+    %{
+      id: question.id,
+      options: all_ids,
+      personalized_options: personalized_options,
+      time_limit: question.time_limit,
+      shuffle_targets: shuffle_targets,
+      remove_targets: remove_targets
+    }
+  end
+
   # Truth Collapse: option count follows connected players (capped by available options in the pool).
   defp resize_truth_options_for_players(q, connected_n) when connected_n < 0, do: q
 
@@ -2126,13 +2141,9 @@ defmodule VnPartyWeb.GameChannel do
         Map.merge(base, %{
           time_left: time_left,
           display_question: disp,
-          current_question: %{
-            id: q2.id,
-            options: Enum.map(q2.options, & &1.id),
-            time_limit: q2.time_limit,
-            shuffle_targets: MapSet.to_list(eff.blind_targets),
-            remove_targets: Map.get(eff, :remove_targets, %{})
-          }
+          current_question:
+            build_player_question_payload(room_id, q2, eff)
+            |> Map.put(:time_limit, q2.time_limit)
         })
 
       _ ->
@@ -2242,9 +2253,12 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   defp apply_distortions_for_round(room_id, round, question) do
+    player_ids = room_id |> Game.list_players() |> Enum.map(& &1.id)
+
     VnParty.TruthDistortionApply.apply_for_round(room_id, round, question,
       swap_fn: &generate_truth_question_from_category/4,
-      category_picker: &pick_swap_category/2
+      category_picker: &pick_swap_category/2,
+      connected_player_ids: player_ids
     )
   end
 
@@ -2305,19 +2319,16 @@ defmodule VnPartyWeb.GameChannel do
   defp distortion_cost("merge_realities"), do: 4
   defp distortion_cost(_), do: 99
 
-  defp validate_distortion_payload("remove_option", payload, room, player_id) do
+  defp validate_distortion_payload("remove_option", payload, room, _player_id) do
     target = Map.get(payload, "target_player_id", Map.get(payload, :target_player_id))
-    connected_ids = room.id |> Game.list_players() |> Enum.filter(& &1.connected) |> Enum.map(& &1.id)
+    room_player_ids = room.id |> Game.list_players() |> Enum.map(& &1.id)
 
     cond do
       not is_binary(target) or target == "" ->
         {:error, "Please select a target player"}
 
-      target == player_id ->
-        {:error, "Cannot remove your own options"}
-
-      target not in connected_ids ->
-        {:error, "Target player is not connected"}
+      target not in room_player_ids ->
+        {:error, "Target player is not in this room"}
 
       true ->
         {:ok, %{"target_player_id" => target}}

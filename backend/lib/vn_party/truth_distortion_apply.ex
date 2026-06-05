@@ -40,10 +40,7 @@ defmodule VnParty.TruthDistortionApply do
           ids
 
         _ ->
-          room_id
-          |> Game.list_players()
-          |> Enum.filter(& &1.connected)
-          |> Enum.map(& &1.id)
+          room_id |> Game.list_players() |> Enum.map(& &1.id)
       end
 
     ordered =

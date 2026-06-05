@@ -201,19 +201,16 @@ defmodule VnParty.TruthDistortionUse do
   defp distortion_cost("merge_realities"), do: 4
   defp distortion_cost(_), do: 99
 
-  defp validate_payload("remove_option", payload, room, player_id) do
+  defp validate_payload("remove_option", payload, room, _player_id) do
     target = Map.get(payload, "target_player_id", Map.get(payload, :target_player_id))
-    connected_ids = room.id |> Game.list_players() |> Enum.filter(& &1.connected) |> Enum.map(& &1.id)
+    room_player_ids = room.id |> Game.list_players() |> Enum.map(& &1.id)
 
     cond do
       not is_binary(target) or target == "" ->
         {:error, "Please select a target player"}
 
-      target == player_id ->
-        {:error, "Cannot remove your own options"}
-
-      target not in connected_ids ->
-        {:error, "Target player is not connected"}
+      target not in room_player_ids ->
+        {:error, "Target player is not in this room"}
 
       true ->
         {:ok, %{"target_player_id" => target}}
