@@ -175,6 +175,7 @@ export function useGameSocket({
     onPlayersSync,
     onHostChanged,
     onRoomClosed,
+    onRoomResetToLobby,
 }: UseGameSocketProps) {
     const [connected, setConnected] = useState(false);
     const [error, setError] = useState<string | null>(null);

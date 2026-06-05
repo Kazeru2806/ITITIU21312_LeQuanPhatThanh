@@ -133,6 +133,12 @@ export function LobbyPage() {
             reset();
             navigate('/');
         },
+        onRoomResetToLobby: (data) => {
+            if (data?.players) setPlayers(data.players);
+            if (data?.total_rounds != null) setRound(0, data.total_rounds);
+            setGameState('lobby');
+            navigate('/lobby');
+        },
         onGameEnded: (data: { room_closed?: boolean; forced?: boolean }) => {
             if (data?.room_closed || data?.forced) {
                 reset();
