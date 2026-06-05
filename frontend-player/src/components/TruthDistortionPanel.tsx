@@ -99,9 +99,48 @@ export function TruthDistortionPanel({
         </button>
       </div>
 
+      {pendingDistortion === 'force_blind' && (
+        <div className="mt-4 p-3 rounded-xl border border-purple-200 bg-purple-50/70">
+          <p className="text-sm font-bold text-purple-800 mb-1">Shuffle target (optional)</p>
+          <p className="text-xs text-purple-700 mb-2">
+            Leave blank to shuffle everyone else&apos;s answers. Or pick one player.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => onSetDistortionTarget('')}
+              className={`rounded-lg px-3 py-2 border-2 text-sm font-bold ${
+                distortionTarget === ''
+                  ? 'bg-purple-600 text-white border-purple-600'
+                  : 'bg-white text-purple-800 border-purple-200'
+              }`}
+            >
+              Everyone else
+            </button>
+            {players
+              .slice()
+              .sort((a, b) => a.nickname.localeCompare(b.nickname))
+              .map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => onSetDistortionTarget(p.id)}
+                  className={`rounded-lg px-3 py-2 border-2 text-sm font-bold ${
+                    distortionTarget === p.id
+                      ? 'bg-purple-600 text-white border-purple-600'
+                      : 'bg-white text-purple-800 border-purple-200'
+                  }`}
+                >
+                  {p.nickname}
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
       {pendingDistortion === 'remove_option' && (
         <div className="mt-4 p-3 rounded-xl border border-purple-200 bg-purple-50/70">
-          <p className="text-sm font-bold text-purple-800 mb-2">Choose target player</p>
+          <p className="text-sm font-bold text-purple-800 mb-2">Choose target player (required)</p>
           <div className="grid grid-cols-2 gap-2">
             {players
               .slice()
@@ -152,7 +191,7 @@ export function TruthDistortionPanel({
                 value={fakeOptionText}
                 onChange={(e) => onSetFakeOptionText(e.target.value)}
                 maxLength={60}
-                placeholder="Fake answer text"
+                placeholder="Fake answer (e.g. 5 or a plausible wrong answer)"
                 className="w-full rounded-xl border-2 border-purple-200 px-3 py-3 font-semibold"
               />
             </div>
@@ -173,7 +212,7 @@ export function TruthDistortionPanel({
             if (readySent || readySubmitting) return;
             onDone();
           }}
-          className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg touch-manipulation cursor-pointer relative z-30"
+          className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg touch-manipulation cursor-pointer relative z-30 transition-transform active:scale-95 active:opacity-90"
         >
           {readySubmitting
             ? 'Sending…'

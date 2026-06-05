@@ -28,9 +28,9 @@ Without room caps, 8 players could each spam swap/blind and break game flow. Roo
 
 ### When to use distortions
 
-- **Discussion phase:** pick a power, then tap **Done — start answering**. Powers apply when the answer phase begins.
-- **Results phase:** same flow before the next round.
-- Tap **Done** early with all players ready to skip the discussion timer.
+- **Results phase only** (after scores, ~45s window before the next round): pick a power, then tap **Done — ready for next round** (or **Confirm power & ready** if a power is selected).
+- Powers apply to the **upcoming** round. Tap **Done** early when all players are ready to skip the wait.
+- **Discussion phase** is for category preview and majority-vote prediction only — no distortion panel there.
 
 ## Charges (distortion power)
 

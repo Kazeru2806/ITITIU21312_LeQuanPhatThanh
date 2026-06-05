@@ -2,6 +2,7 @@ defmodule VnPartyWeb.GameChannel do
   use VnPartyWeb, :channel
   alias VnParty.Game
   alias VnParty.TruthResults
+  alias VnParty.FakeInject
   alias VnParty.Game.Presence
   alias VnParty.Game.DistortionRules
   alias VnParty.Game.AnswerCommit
@@ -373,8 +374,8 @@ defmodule VnPartyWeb.GameChannel do
     else
       phase = current_truth_phase(room.id)
 
-      if phase not in ["discussion", "results"] do
-        {:reply, {:error, %{reason: "Distortions can only be used during discussion or results"}}, socket}
+      if phase != "results" do
+        {:reply, {:error, %{reason: "Distortions can only be used during the results phase"}}, socket}
       else
       maybe_record_latency(socket, "use_distortion", payload, %{action: action})
       if action == "inject_fake_option" do
@@ -451,6 +452,9 @@ defmodule VnPartyWeb.GameChannel do
       room.current_round >= room.total_rounds ->
         {:reply, {:error, %{reason: "No next round available"}}, socket}
 
+      current_truth_phase(room.id) != "results" ->
+        {:reply, {:error, %{reason: "Fake inject can only be used during the results phase"}}, socket}
+
       true ->
         phase = current_truth_phase(room.id)
         effect_round = distortion_effect_round(room, phase)
@@ -517,9 +521,14 @@ defmodule VnPartyWeb.GameChannel do
     lock_key = {room.id, effect_round, player_id}
     maybe_record_latency(socket, "set_fake_option_text", payload, %{})
 
-    if Game.room_mode(room) != "truth_collapse" do
-      {:reply, {:error, %{reason: "Distortions are only available in Truth Collapse"}}, socket}
-    else
+    cond do
+      Game.room_mode(room) != "truth_collapse" ->
+        {:reply, {:error, %{reason: "Distortions are only available in Truth Collapse"}}, socket}
+
+      phase != "results" ->
+        {:reply, {:error, %{reason: "Fake inject can only be used during the results phase"}}, socket}
+
+      true ->
       case :ets.lookup(:truth_fake_locks, lock_key) do
         [] ->
           {:reply, {:error, %{reason: "You must lock this power first"}}, socket}
@@ -572,21 +581,9 @@ defmodule VnPartyWeb.GameChannel do
       player_id = socket.assigns.player_id
       phase = current_truth_phase(room_id) || "results"
 
-      distortion_note =
-        case payload do
-          %{"distortion" => %{"action" => action} = d} when is_binary(action) ->
-            case apply_distortion_for_player(socket, room, phase, action, d) do
-              :ok -> nil
-              {:error, reason} -> reason
-            end
-
-          _ ->
-            nil
-        end
-
       case TruthResults.record_results_ready(room_id, player_id, round) do
         {:ok, body} ->
-          {:reply, {:ok, Map.put(body, :distortion_note, distortion_note)}, socket}
+          {:reply, {:ok, body}, socket}
 
         {:error, reason} ->
           {:reply, {:error, %{reason: reason}}, socket}
@@ -2343,20 +2340,24 @@ defmodule VnPartyWeb.GameChannel do
 
     {q3, fake_entries_applied, injected_ids} =
       Enum.reduce(acc.fake_entries, {q2, [], MapSet.new()}, fn e, {q_acc, applied, used_ids} ->
-        wrongs =
-          Enum.filter(q_acc.options, fn o ->
-            !(if is_list(q_acc.correct), do: o.id in q_acc.correct, else: o.id == q_acc.correct)
-          end)
-          |> Enum.reject(fn o -> MapSet.member?(used_ids, o.id) end)
+        victim = FakeInject.pick_victim(q_acc, e.fake_text, used_ids)
 
-        case wrongs do
-          [] ->
+        case victim do
+          nil ->
             {q_acc, applied, used_ids}
 
-          _ ->
-            victim = Enum.at(wrongs, :rand.uniform(length(wrongs)) - 1)
-            opts = Enum.map(q_acc.options, fn o -> if o.id == victim.id, do: %{o | text: e.fake_text}, else: o end)
-            { %{q_acc | options: opts}, applied ++ [Map.put(e, :option_id, victim.id)], MapSet.put(used_ids, victim.id)}
+          %{id: vid} ->
+            opts =
+              Enum.map(q_acc.options, fn o ->
+                if o.id == vid, do: %{o | text: e.fake_text}, else: o
+              end)
+
+            entry =
+              e
+              |> Map.put(:option_id, vid)
+              |> Map.put(:display_text, e.fake_text)
+
+            {%{q_acc | options: opts}, applied ++ [entry], MapSet.put(used_ids, vid)}
         end
       end)
 
@@ -2458,9 +2459,14 @@ defmodule VnPartyWeb.GameChannel do
     txt = sanitize_fake_text(raw)
 
     cond do
-      txt == "" -> {:error, "Please enter a fake answer"}
-      String.length(txt) < 3 -> {:error, "Fake answer is too short"}
-      String.length(txt) > 60 -> {:error, "Fake answer is too long (max 60 chars)"}
+      txt == "" ->
+        {:error, "Please enter a fake answer"}
+
+      String.length(txt) < 3 and not Regex.match?(~r/^\d+$/, txt) ->
+        {:error, "Fake answer is too short (min 3 chars, or a number like 5)"}
+
+      String.length(txt) > 60 ->
+        {:error, "Fake answer is too long (max 60 chars)"}
       contains_prohibited_text?(txt) -> {:error, "That text is not allowed by room safety filter"}
       true -> {:ok, %{"fake_text" => txt}}
     end

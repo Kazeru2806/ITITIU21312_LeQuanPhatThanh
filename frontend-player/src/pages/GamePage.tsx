@@ -39,8 +39,6 @@ export function GamePage() {
         total: number;
         acked_player_ids?: string[];
     } | null>(null);
-    const [discussionReadySent, setDiscussionReadySent] = useState(false);
-    const [discussionReadyProgress, setDiscussionReadyProgress] = useState<{ acked: number; total: number } | null>(null);
     const powerPhaseLockRef = useRef(false);
 
     const {
@@ -260,7 +258,17 @@ export function GamePage() {
         }
     };
 
-    const { commitAnswer, submitPrediction, truthResultsReady, truthDiscussionReady, lockFakeOption, leaveRoom, connected, error: socketError } = useGameSocket({
+    const {
+        commitAnswer,
+        submitPrediction,
+        truthResultsReady,
+        useDistortion,
+        lockFakeOption,
+        setFakeOptionText: submitFakeOptionText,
+        leaveRoom,
+        connected,
+        error: socketError,
+    } = useGameSocket({
         roomCode: roomCode || '',
         playerId: playerId || '',
         nickname: nickname || '',
@@ -314,8 +322,6 @@ export function GamePage() {
             setFakeOptionText('');
             setFakeLockConfirmed(false);
             setFakePreview(null);
-            setDiscussionReadySent(false);
-            setDiscussionReadyProgress(null);
         },
         onDiscussionStarted: (data) => {
             powerPhaseLockRef.current = false;
@@ -331,8 +337,6 @@ export function GamePage() {
                 (data as { phase_ends_at_ms?: number }).phase_ends_at_ms ??
                     Date.now() + (data.discussion_seconds ?? 15) * 1000
             );
-            setDiscussionReadySent(false);
-            setDiscussionReadyProgress(null);
             setPendingDistortion(null);
             setDistortionLocked(false);
             setDiscussionMeta({
@@ -346,8 +350,6 @@ export function GamePage() {
             setFakeOptionText('');
             setFakeLockConfirmed(false);
             setFakePreview(null);
-            setDiscussionReadySent(false);
-            setDiscussionReadyProgress(null);
         },
         onQuestionRevealed: (question) => {
             if (powerPhaseLockRef.current) {
@@ -495,9 +497,6 @@ export function GamePage() {
                 enterPowerResultsPhase();
             }
         },
-        onTruthDiscussionProgress: (data) => {
-            setDiscussionReadyProgress({ acked: data.acked_count, total: data.total });
-        },
         onTruthStatsUpdated: (data) => {
             if (data?.stats) setTruthStats(data.stats);
         },
@@ -551,43 +550,45 @@ export function GamePage() {
         }
     };
 
-    const buildDistortionPayload = (): Record<string, unknown> | undefined => {
-        if (!pendingDistortion || distortionLocked) return undefined;
-
-        const distortion: Record<string, unknown> = { action: pendingDistortion };
-
-        if (pendingDistortion === 'remove_option' && distortionTarget) {
-            distortion.target_player_id = distortionTarget;
-        }
-        if (pendingDistortion === 'inject_fake_option' && fakeOptionText.trim().length >= 3) {
-            distortion.fake_text = fakeOptionText.trim();
-        }
-
-        return { distortion };
+    const fakeTextValid = (text: string) => {
+        const t = text.trim();
+        return t.length >= 3 || /^\d+$/.test(t);
     };
 
-    const handleDiscussionReady = async () => {
-        if (discussionReadySent) return;
-        try {
-            const payload = buildDistortionPayload() ?? {};
-            const raw = await truthDiscussionReady(payload);
-            const res = (raw && typeof raw === 'object' && 'response' in raw
-                ? (raw as { response: { distortion_note?: string } }).response
-                : raw) as { distortion_note?: string };
-            setDiscussionReadySent(true);
-            if (pendingDistortion && !res?.distortion_note) {
-                setDistortionLocked(true);
-                setPendingDistortion(null);
-            }
-            if (res?.distortion_note) {
-                setDistortionToast(String(res.distortion_note));
-            } else {
-                setDistortionToast(null);
-            }
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : 'Could not confirm — check connection.';
-            setDistortionToast(msg);
-            console.error('truth_discussion_ready failed', e);
+    const canApplyPendingPower = (): boolean => {
+        if (!pendingDistortion || distortionLocked) return false;
+        switch (pendingDistortion) {
+            case 'remove_option':
+                return !!distortionTarget;
+            case 'swap_category':
+            case 'force_blind':
+                return true;
+            case 'inject_fake_option':
+                return fakeLockConfirmed && fakeTextValid(fakeOptionText);
+            default:
+                return false;
+        }
+    };
+
+    const applyPendingPower = async (): Promise<void> => {
+        if (!pendingDistortion || distortionLocked) return;
+
+        switch (pendingDistortion) {
+            case 'remove_option':
+                await useDistortion('remove_option', { target_player_id: distortionTarget });
+                break;
+            case 'swap_category':
+                await useDistortion('swap_category', {});
+                break;
+            case 'force_blind':
+                await useDistortion(
+                    'force_blind',
+                    distortionTarget ? { target_player_id: distortionTarget } : {}
+                );
+                break;
+            case 'inject_fake_option':
+                await submitFakeOptionText(fakeOptionText.trim());
+                break;
         }
     };
 
@@ -613,17 +614,26 @@ export function GamePage() {
     const handleTruthResultsReady = async () => {
         if (!playerId || !roomCode || resultsReadySending || playerResultsReady) return;
 
+        const hadPendingPower = !!pendingDistortion && !distortionLocked;
+        const willApplyPower = canApplyPendingPower();
+
         setResultsReadySending(true);
         setDistortionToast(null);
 
-        const payload = buildDistortionPayload() ?? {};
+        setResultsReadyProgress((prev) => {
+            const total =
+                prev?.total ?? useGameStore.getState().players.filter((p) => p.connected).length || 1;
+            const ids = [...(prev?.acked_player_ids ?? [])];
+            if (playerId && !ids.includes(playerId)) ids.push(playerId);
+            return { acked: ids.length, total, acked_player_ids: ids };
+        });
+
         let res: {
-            distortion_note?: string;
-            progress?: { acked_count: number; total: number };
+            progress?: { acked_count: number; total: number; acked_player_ids?: string[] };
         } = {};
 
         try {
-            const raw = await truthResultsReady(payload);
+            const raw = await truthResultsReady({});
             res = parseReadyResponse(raw);
         } catch (wsErr) {
             console.warn('truth_results_ready WS failed, trying HTTP fallback', wsErr);
@@ -632,10 +642,7 @@ export function GamePage() {
                 if (!httpRes.success) {
                     throw new Error(httpRes.error || 'Ready vote failed');
                 }
-                res = {
-                    distortion_note: httpRes.distortion_note ?? undefined,
-                    progress: httpRes.progress,
-                };
+                res = { progress: httpRes.progress };
             } catch (httpErr) {
                 const msg =
                     httpErr instanceof Error ? httpErr.message : 'Could not confirm — check connection.';
@@ -650,27 +657,33 @@ export function GamePage() {
             setResultsReadyProgress({
                 acked: res.progress.acked_count,
                 total: res.progress.total,
-                acked_player_ids: (res.progress as { acked_player_ids?: string[] }).acked_player_ids,
-            });
-        } else {
-            setResultsReadyProgress((prev) => {
-                const total = prev?.total ?? useGameStore.getState().players.filter((p) => p.connected).length || 1;
-                const ids = [...(prev?.acked_player_ids ?? [])];
-                if (playerId && !ids.includes(playerId)) ids.push(playerId);
-                return {
-                    acked: ids.length,
-                    total,
-                    acked_player_ids: ids,
-                };
+                acked_player_ids: res.progress.acked_player_ids,
             });
         }
 
-        if (pendingDistortion && !res?.distortion_note) {
+        if (hadPendingPower && willApplyPower) {
             setDistortionLocked(true);
-            setPendingDistortion(null);
-        }
-        if (res?.distortion_note) {
-            setDistortionToast(String(res.distortion_note));
+            try {
+                await applyPendingPower();
+                setPendingDistortion(null);
+            } catch (powerErr) {
+                const reason =
+                    typeof powerErr === 'object' && powerErr !== null
+                        ? String((powerErr as { reason?: string; message?: string }).reason ||
+                              (powerErr as { message?: string }).message ||
+                              'Power could not be applied')
+                        : 'Power could not be applied';
+                setDistortionToast(`Ready counted — ${reason}`);
+                console.error('applyPendingPower failed', powerErr);
+            }
+        } else if (hadPendingPower && !willApplyPower) {
+            const hint =
+                pendingDistortion === 'remove_option'
+                    ? 'Pick a target player first, or tap Done again without a power to skip it.'
+                    : pendingDistortion === 'inject_fake_option'
+                      ? 'Lock the power and enter fake text (e.g. 5), then tap Done again.'
+                      : 'Complete your power setup, or tap Done again without a power to skip it.';
+            setDistortionToast(`Marked ready — ${hint}`);
         }
 
         setResultsReadySending(false);
@@ -881,26 +894,6 @@ export function GamePage() {
                                 </button>
                             ))}
                         </div>
-
-                        <TruthDistortionPanel
-                            myCharges={myCharges}
-                            players={players}
-                            pendingDistortion={pendingDistortion}
-                            distortionTarget={distortionTarget}
-                            distortionLocked={distortionLocked}
-                            distortionToast={distortionToast}
-                            fakeLockConfirmed={fakeLockConfirmed}
-                            fakeOptionText={fakeOptionText}
-                            fakePreview={fakePreview}
-                            readySent={discussionReadySent}
-                            readyProgress={discussionReadyProgress}
-                            doneLabel="Done — start answering"
-                            onToggleDistortion={handleToggleDistortion}
-                            onSetDistortionTarget={setDistortionTarget}
-                            onSetFakeOptionText={setFakeOptionText}
-                            onConfirmFakeLock={handleConfirmFakeLock}
-                            onDone={handleDiscussionReady}
-                        />
                     </div>
                 </div>
             </div>
