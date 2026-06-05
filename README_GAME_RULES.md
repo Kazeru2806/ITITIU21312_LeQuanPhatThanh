@@ -30,7 +30,7 @@ Without room caps, 8 players could each spam swap/blind and break game flow. Roo
 
 - **Results phase only** (after scores, ~45s window before the next round): pick a power, then tap **Done — ready for next round** (or **Confirm power & ready** if a power is selected).
 - Powers apply to the **upcoming** round. Tap **Done** early when all players are ready to skip the wait.
-- **Discussion phase** is for category preview and majority-vote prediction only — no distortion panel there.
+- **Discussion phase** is for category preview and majority-vote prediction only — **no distortion panel on any player device** (host phone or others). Powers picked in the previous round’s results phase apply when the next round starts (category swap visible in theme; remove/shuffle/inject apply when answering begins).
 
 ## Charges (distortion power)
 

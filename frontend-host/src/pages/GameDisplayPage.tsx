@@ -316,6 +316,18 @@ export function GameDisplayPage() {
       setGameState('game_end');
       setTimeout(() => navigate('/results'), 2000);
     },
+    onRematchApproved: (data: any) => {
+      if (data?.players) setPlayers(data.players);
+      setGameState('lobby');
+      setRound(0, useDisplayStore.getState().totalRounds || 8);
+      navigate('/lobby', { replace: true });
+    },
+    onRoomResetToLobby: (data: any) => {
+      if (data?.players) setPlayers(data.players);
+      setGameState('lobby');
+      setRound(0, data.total_rounds ?? useDisplayStore.getState().totalRounds || 8);
+      navigate('/lobby', { replace: true });
+    },
     onRoomClosed: () => {
       reset();
       navigate('/');
@@ -339,6 +351,8 @@ export function GameDisplayPage() {
     onTruthResultsProgress: callbacksRef.current.onTruthResultsProgress,
     onAnsweringTimerUpdate: callbacksRef.current.onAnsweringTimerUpdate,
     onRoomClosed: callbacksRef.current.onRoomClosed,
+    onRematchApproved: callbacksRef.current.onRematchApproved,
+    onRoomResetToLobby: callbacksRef.current.onRoomResetToLobby,
   });
 
   if (!roomCode) return null;

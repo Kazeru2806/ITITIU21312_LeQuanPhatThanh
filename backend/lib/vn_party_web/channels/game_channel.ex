@@ -672,13 +672,7 @@ defmodule VnPartyWeb.GameChannel do
     else
       maybe_record_latency(socket, "truth_discussion_ready", payload, %{})
       # Discussion no longer has a Done button or distortion powers — ignore legacy clients.
-      {:reply,
-       {:ok,
-        %{
-          received: true,
-          deprecated: true,
-          distortion_note: "Discussion ready was removed. Wait for the discussion timer."
-        }}, socket}
+      {:reply, {:ok, %{received: true}}, socket}
     end
   end
 
@@ -931,7 +925,16 @@ defmodule VnPartyWeb.GameChannel do
     key = {:truth_q_started, room_id, round}
     if :ets.insert_new(:round_scored, {key, true}) do
       room = Game.get_room!(room_id)
-      {question, effects} = prepare_truth_round_question(room, round)
+
+      {question, effects} =
+        case :ets.lookup(:truth_round_data, {room_id, round}) do
+          [{{^room_id, ^round}, %{question: q, effects: e}}] when is_map(q) ->
+            {q, e}
+
+          _ ->
+            prepare_truth_round_question(room, round)
+        end
+
       :ets.insert(:truth_round_data, {{room_id, round}, %{question: question, effects: effects}})
 
       :ets.insert(:truth_room_phase, {room_id, %{round: round, phase: "answering"}})
@@ -1043,33 +1046,30 @@ defmodule VnPartyWeb.GameChannel do
             discussion_seconds: 15
           }
 
-          round_started_payload =
-            if Game.room_mode(updated_room) == "truth_collapse" do
-              {pre_q, _} = prepare_truth_round_question(updated_room, updated_room.current_round)
-              cat = get_truth_active_category(updated_room.id)
-              opt_ids = Enum.map(pre_q.options, & &1.id)
-
-              sync =
-                if is_binary(cat) do
-                  %{
-                    category: cat,
-                    category_label: truth_category_label(cat),
-                    option_ids: opt_ids
-                  }
-                else
-                  %{option_ids: opt_ids}
-                end
-
-              Map.merge(round_started_payload, sync)
-            else
-              round_started_payload
-            end
-
-          broadcast_to_both(socket, "round_started", round_started_payload, "display:round_started", round_started_payload)
-
           if Game.room_mode(updated_room) == "truth_collapse" do
             start_truth_round_flow(socket, updated_room, updated_room.current_round)
+
+            round_started_payload =
+              case :ets.lookup(:truth_round_data, {updated_room.id, updated_room.current_round}) do
+                [{{_, _}, %{question: q, effects: eff}}] when is_map(q) ->
+                  cat = Map.get(q, :category)
+                  opt_ids = Enum.map(q.options, & &1.id)
+                  labels = Enum.map(eff.category_timeline || [cat], &truth_category_label/1)
+
+                  Map.merge(round_started_payload, %{
+                    category: cat,
+                    category_label: truth_category_label(cat),
+                    category_timeline_labels: labels,
+                    option_ids: opt_ids
+                  })
+
+                _ ->
+                  round_started_payload
+              end
+
+            broadcast_to_both(socket, "round_started", round_started_payload, "display:round_started", round_started_payload)
           else
+            broadcast_to_both(socket, "round_started", round_started_payload, "display:round_started", round_started_payload)
             # Automatically request and broadcast question for next round immediately
             IO.puts("🔄 Round advanced, requesting question for round #{updated_room.current_round}")
             question = generate_question_for_mode(updated_room, updated_room.current_round)
@@ -1196,8 +1196,9 @@ defmodule VnPartyWeb.GameChannel do
         reset_room_for_rematch(room_id)
         clear_rematch_state(room_id)
 
-        approved_payload = %{message: "#{vote_count} players confirmed rematch.", voters: MapSet.to_list(votes)}
+        approved_payload = rematch_approved_payload(room_id, vote_count, votes)
         broadcast_to_both(socket, "rematch_approved", approved_payload, "display:rematch_approved", approved_payload)
+        broadcast_room_reset_to_lobby(room_id)
         broadcast_game_state(room_id)
 
       all_decided ->
@@ -1239,8 +1240,9 @@ defmodule VnPartyWeb.GameChannel do
       reset_room_for_rematch(room_id)
       clear_rematch_state(room_id)
 
-      approved_payload = %{message: "#{vote_count} players confirmed rematch.", voters: MapSet.to_list(votes)}
+      approved_payload = rematch_approved_payload(room_id, vote_count, votes)
       broadcast_to_both(socket, "rematch_approved", approved_payload, "display:rematch_approved", approved_payload)
+      broadcast_room_reset_to_lobby(room_id)
       broadcast_game_state(room_id)
     else
       clear_rematch_state(room_id)
@@ -1423,6 +1425,46 @@ defmodule VnPartyWeb.GameChannel do
     state
   end
 
+  defp broadcast_room_reset_to_lobby(room_id) do
+    room = Game.get_room!(room_id)
+    players = Game.list_players(room_id)
+    mode = Game.room_mode(room)
+
+    payload = %{
+      state: "lobby",
+      room_code: room.code,
+      current_round: 0,
+      total_rounds: room.total_rounds,
+      players: format_players(players, mode)
+    }
+
+    Endpoint.broadcast("game:#{room.code}", "room_reset_to_lobby", payload)
+    Endpoint.broadcast("display:#{room.code}", "display:room_reset_to_lobby", payload)
+  end
+
+  defp rematch_approved_payload(room_id, vote_count, votes) do
+    room = Game.get_room!(room_id)
+    players = Game.list_players(room_id)
+    mode = Game.room_mode(room)
+
+    %{
+      message: "#{vote_count} players confirmed rematch.",
+      state: "lobby",
+      room_code: room.code,
+      voters: MapSet.to_list(votes),
+      players: format_players(players, mode)
+    }
+  end
+
+  defp purge_distortions_for_round(room_id, round) do
+    :ets.lookup(:truth_distortions, room_id)
+    |> Enum.filter(fn
+      {^room_id, ^round, _, _, _} -> true
+      _ -> false
+    end)
+    |> Enum.each(&:ets.delete_object(:truth_distortions, &1))
+  end
+
   defp rematch_vote_payload(room_id) do
     votes =
       case :ets.lookup(:rematch_votes, room_id) do
@@ -1493,7 +1535,8 @@ defmodule VnPartyWeb.GameChannel do
     :ets.delete(:round_scored, {:truth_q_started, room.id, round})
     clear_truth_discussion_acks(room.id, round)
 
-    {question, effects} = prepare_truth_round_base(room, round)
+    {question, effects} = prepare_truth_round_question(room, round)
+    purge_distortions_for_round(room.id, round)
 
     set_truth_active_category(room.id, question.category)
 

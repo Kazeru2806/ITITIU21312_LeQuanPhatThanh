@@ -41,6 +41,11 @@ interface UseDisplaySocketProps {
   onAnsweringTimerUpdate?: (data: { round: number; phase_ends_at_ms: number }) => void;
   onPlayersSync?: (data: { players: Player[]; host_id?: string | null }) => void;
   onRoomClosed?: (data: { message?: string; redirect_seconds?: number }) => void;
+  onRoomResetToLobby?: (data: {
+    state: string;
+    room_code: string;
+    players: Player[];
+  }) => void;
 }
 
 export function useDisplaySocket({
@@ -63,6 +68,7 @@ export function useDisplaySocket({
   onAnsweringTimerUpdate,
   onPlayersSync,
   onRoomClosed,
+  onRoomResetToLobby,
 }: UseDisplaySocketProps) {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +95,7 @@ export function useDisplaySocket({
     onAnsweringTimerUpdate,
     onPlayersSync,
     onRoomClosed,
+    onRoomResetToLobby,
   };
 
   useEffect(() => {
@@ -200,6 +207,10 @@ export function useDisplaySocket({
 
     channel.on('display:room_closed', (data) => {
       cbRef.current.onRoomClosed?.(data);
+    });
+
+    channel.on('display:room_reset_to_lobby', (data) => {
+      cbRef.current.onRoomResetToLobby?.(data);
     });
 
     return () => {

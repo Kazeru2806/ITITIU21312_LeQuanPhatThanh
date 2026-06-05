@@ -66,7 +66,12 @@ export function ResultsPage() {
     },
     onRematchApproved: () => {
       setGameState('lobby');
-      navigate('/lobby');
+      navigate('/lobby', { replace: true });
+    },
+    onRoomResetToLobby: (data) => {
+      if (data?.players) setPlayers(data.players);
+      setGameState('lobby');
+      navigate('/lobby', { replace: true });
     },
     onRematchCancelled: (data) => {
       if (data?.kick_to_home) {

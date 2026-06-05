@@ -32,6 +32,12 @@ export function ResultsPage() {
         }
     }, [playerId, roomCode, navigate]);
 
+    const goToLobby = (total?: number) => {
+        setGameState('lobby');
+        setRound(0, total ?? 5);
+        navigate('/lobby', { replace: true });
+    };
+
     useEffect(() => {
         if (!roomCode) return;
         let cancelled = false;
@@ -39,21 +45,20 @@ export function ResultsPage() {
             try {
                 const res = await api.getRoom(roomCode);
                 if (!cancelled && res.success && res.room?.state === 'lobby') {
-                    setGameState('lobby');
-                    setRound(0, res.room.total_rounds ?? 5);
-                    navigate('/lobby');
+                    goToLobby(res.room.total_rounds);
                 }
             } catch {
                 // ignore
             }
         };
         poll();
-        const id = window.setInterval(poll, 2500);
+        const intervalMs = hasVoted ? 1000 : 2500;
+        const id = window.setInterval(poll, intervalMs);
         return () => {
             cancelled = true;
             window.clearInterval(id);
         };
-    }, [roomCode, navigate, setGameState, setRound]);
+    }, [roomCode, hasVoted, navigate, setGameState, setRound]);
 
     // Countdown timer - backend handles timeout, this is just for display
     useEffect(() => {
@@ -78,10 +83,12 @@ export function ResultsPage() {
         onGameState: (state: any) => {
             if (state.state === 'lobby') {
                 if (state.players) setPlayers(state.players);
-                setGameState('lobby');
-                setRound(state.current_round ?? 0, state.total_rounds ?? 5);
-                navigate('/lobby');
+                goToLobby(state.total_rounds);
             }
+        },
+        onRoomResetToLobby: (data: any) => {
+            if (data?.players) setPlayers(data.players);
+            goToLobby(data.total_rounds);
         },
         onRematchVoteUpdated: (data: any) => {
             console.log('Rematch vote updated:', data);
@@ -96,31 +103,19 @@ export function ResultsPage() {
             }, 1000);
         },
         onRematchStarting: () => {
-            // Rematch approved - go to lobby
             console.log('Rematch approved, going to lobby...');
             setRematchExpired(true);
-            setTimeout(() => {
-                setGameState('lobby');
-                setRound(0, 5);
-                navigate('/lobby');
-            }, 1000);
+            goToLobby();
         },
         onRematchCancelled: (data: any) => {
-            // Not enough players want rematch
             console.log('Rematch cancelled:', data);
             setRematchExpired(true);
-            setTimeout(() => {
-                if (data?.kick_to_home) {
-                    // Kick to home page
-                    reset();
-                    navigate('/');
-                } else {
-                    // Go to lobby (legacy behavior)
-                    setGameState('lobby');
-                    setRound(0, 5);
-                    navigate('/lobby');
-                }
-            }, 1000);
+            if (data?.kick_to_home) {
+                reset();
+                navigate('/', { replace: true });
+            } else {
+                goToLobby();
+            }
         },
     });
 

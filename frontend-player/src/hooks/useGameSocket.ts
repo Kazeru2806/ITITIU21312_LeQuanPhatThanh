@@ -138,6 +138,13 @@ interface UseGameSocketProps {
     }) => void;
     onHostChanged?: (data: { host_id: string; host_nickname: string }) => void;
     onRoomClosed?: (data: { message: string; redirect_seconds?: number; reason?: string }) => void;
+    onRoomResetToLobby?: (data: {
+        state: string;
+        room_code: string;
+        current_round: number;
+        total_rounds: number;
+        players: PlayerJoinedData['players'];
+    }) => void;
 }
 
 export function useGameSocket({
@@ -207,6 +214,7 @@ export function useGameSocket({
         onPlayersSync,
         onHostChanged,
         onRoomClosed,
+        onRoomResetToLobby,
     };
 
     useEffect(() => {
@@ -276,6 +284,10 @@ export function useGameSocket({
 
         channel.on('room_closed', (data: { message: string; redirect_seconds?: number }) => {
             cbRef.current.onRoomClosed?.(data);
+        });
+
+        channel.on('room_reset_to_lobby', (data: any) => {
+            cbRef.current.onRoomResetToLobby?.(data);
         });
 
         channel.on('game_started', (data: GameStartedData) => {

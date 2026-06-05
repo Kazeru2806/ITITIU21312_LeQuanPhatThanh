@@ -63,7 +63,7 @@ export function GamePage() {
         setGameState,
     } = useGameStore();
 
-    const powerPhaseActive = mode === 'truth_collapse' && (phase === 'results' || showResult);
+    const powerPhaseActive = mode === 'truth_collapse' && phase === 'results';
 
     const enterPowerResultsPhase = useCallback(
         (endsAtMs?: number) => {
