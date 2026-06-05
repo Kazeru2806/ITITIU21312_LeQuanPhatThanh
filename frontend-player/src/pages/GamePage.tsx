@@ -267,9 +267,7 @@ export function GamePage() {
         commitAnswer,
         submitPrediction,
         truthResultsReady,
-        useDistortion,
         lockFakeOption,
-        setFakeOptionText: submitFakeOptionText,
         leaveRoom,
         connected,
         error: socketError,
@@ -598,25 +596,22 @@ export function GamePage() {
         }
     };
 
-    const applyPendingPower = async (): Promise<void> => {
-        if (!pendingDistortion || distortionLocked) return;
+    const buildDistortionPayload = (): Record<string, string> | undefined => {
+        if (!pendingDistortion || distortionLocked || !canApplyPendingPower()) return undefined;
 
         switch (pendingDistortion) {
             case 'remove_option':
-                await useDistortion('remove_option', { target_player_id: distortionTarget });
-                break;
+                return { action: 'remove_option', target_player_id: distortionTarget };
             case 'swap_category':
-                await useDistortion('swap_category', {});
-                break;
+                return { action: 'swap_category' };
             case 'force_blind':
-                await useDistortion(
-                    'force_blind',
-                    distortionTarget ? { target_player_id: distortionTarget } : {}
-                );
-                break;
+                return distortionTarget
+                    ? { action: 'force_blind', target_player_id: distortionTarget }
+                    : { action: 'force_blind' };
             case 'inject_fake_option':
-                await submitFakeOptionText(fakeOptionText.trim());
-                break;
+                return { action: 'inject_fake_option', fake_text: fakeOptionText.trim() };
+            default:
+                return undefined;
         }
     };
 
@@ -644,28 +639,14 @@ export function GamePage() {
 
         const hadPendingPower = !!pendingDistortion && !distortionLocked;
         const willApplyPower = canApplyPendingPower();
+        const distortionPayload = willApplyPower ? buildDistortionPayload() : undefined;
 
         setResultsReadyLocal(true);
         setResultsReadySending(true);
         setDistortionToast(null);
 
-        if (hadPendingPower && willApplyPower) {
+        if (distortionPayload) {
             setDistortionLocked(true);
-            try {
-                await applyPendingPower();
-                setPendingDistortion(null);
-            } catch (powerErr) {
-                const reason =
-                    typeof powerErr === 'object' && powerErr !== null
-                        ? String(
-                              (powerErr as { reason?: string; message?: string }).reason ||
-                                  (powerErr as { message?: string }).message ||
-                                  'Power could not be applied'
-                          )
-                        : 'Power could not be applied';
-                setDistortionToast(`Power failed — ${reason}`);
-                console.error('applyPendingPower failed', powerErr);
-            }
         }
 
         setResultsReadyProgress((prev) => {
@@ -677,20 +658,31 @@ export function GamePage() {
         });
 
         let res: {
+            distortion_note?: string;
             progress?: { acked_count: number; total: number; acked_player_ids?: string[] };
         } = {};
 
+        const readyBody = distortionPayload ? { distortion: distortionPayload } : {};
+
         try {
-            const raw = await truthResultsReady({});
+            const raw = await truthResultsReady(readyBody);
             res = parseReadyResponse(raw);
         } catch (wsErr) {
             console.warn('truth_results_ready WS failed, trying HTTP fallback', wsErr);
             try {
-                const httpRes = await api.truthResultsReady(roomCode, playerId, currentRound);
+                const httpRes = await api.truthResultsReady(
+                    roomCode,
+                    playerId,
+                    currentRound,
+                    distortionPayload
+                );
                 if (!httpRes.success) {
                     throw new Error(httpRes.error || 'Ready vote failed');
                 }
-                res = { progress: httpRes.progress };
+                res = {
+                    distortion_note: httpRes.distortion_note ?? undefined,
+                    progress: httpRes.progress,
+                };
             } catch (httpErr) {
                 const msg =
                     httpErr instanceof Error ? httpErr.message : 'Could not confirm — check connection.';
@@ -708,6 +700,15 @@ export function GamePage() {
                 total: res.progress.total,
                 acked_player_ids: res.progress.acked_player_ids,
             });
+        }
+
+        if (distortionPayload) {
+            if (res.distortion_note === 'distortion_applied') {
+                setPendingDistortion(null);
+            } else if (res.distortion_note) {
+                setDistortionToast(`Power failed — ${res.distortion_note}`);
+                console.error('distortion apply failed', res.distortion_note);
+            }
         }
 
         if (hadPendingPower && !willApplyPower) {

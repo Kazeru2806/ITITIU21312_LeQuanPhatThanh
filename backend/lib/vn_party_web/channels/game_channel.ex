@@ -2,6 +2,7 @@ defmodule VnPartyWeb.GameChannel do
   use VnPartyWeb, :channel
   alias VnParty.Game
   alias VnParty.TruthResults
+  alias VnParty.TruthDistortionUse
   alias VnParty.Game.Presence
   alias VnParty.Game.DistortionRules
   alias VnParty.Game.AnswerCommit
@@ -356,74 +357,20 @@ defmodule VnPartyWeb.GameChannel do
 
   @impl true
   def handle_in("use_distortion", %{"action" => action} = payload, socket) do
-    room = Game.get_room!(socket.assigns.room_id)
-    if Game.room_mode(room) != "truth_collapse" do
-      {:reply, {:error, %{reason: "Distortions are only available in Truth Collapse"}}, socket}
-    else
-      phase = current_truth_phase(room.id)
+    maybe_record_latency(socket, "use_distortion", payload, %{action: action})
 
-      if phase not in ["results", "discussion", "transition"] do
-        {:reply, {:error, %{reason: "Distortions can only be used during the results phase"}}, socket}
-      else
-      maybe_record_latency(socket, "use_distortion", payload, %{action: action})
-      if action == "inject_fake_option" do
-        {:reply, {:error, %{reason: "Use fake-option lock flow first"}}, socket}
-      else
-      player_id = socket.assigns.player_id
-      cost = distortion_cost(action)
-      stats = get_truth_stats(player_id)
+    case TruthDistortionUse.apply(
+           socket.assigns.room_id,
+           socket.assigns.player_id,
+           socket.assigns.nickname,
+           action,
+           payload
+         ) do
+      {:ok, body} ->
+        {:reply, {:ok, body}, socket}
 
-      cond do
-        stats.charges < cost ->
-          {:reply, {:error, %{reason: "Not enough distortion power"}}, socket}
-
-        not DistortionRules.can_use?(room.id, player_id, action) ->
-          {:reply, {:error, %{reason: DistortionRules.denial_reason(action)}}, socket}
-
-        true ->
-        case validate_distortion_payload(action, payload, room, player_id) do
-          {:error, reason} ->
-            {:reply, {:error, %{reason: reason}}, socket}
-
-          {:ok, cleaned_payload} ->
-            effect_round = distortion_effect_round(room, phase)
-
-            DistortionRules.record_use!(room.id, player_id, action)
-            update_truth_stats(player_id, fn s -> %{s | charges: max(0, s.charges - cost), di: s.di + cost * 10} end)
-            :ets.insert(:truth_distortions, {socket.assigns.room_id, effect_round, player_id, action, cleaned_payload})
-
-            Game.create_event(room.id, "distortion_used", %{
-              action: action,
-              round: effect_round,
-              payload: cleaned_payload
-            }, player_id)
-
-            log_payload = %{
-              round: effect_round,
-              player_id: player_id,
-              nickname: socket.assigns.nickname,
-              action: action,
-              payload: cleaned_payload,
-              remaining_charges: get_truth_stats(player_id).charges
-            }
-
-            broadcast_to_both(socket, "distortion_used", log_payload, "display:distortion_used", log_payload)
-
-            # Push updated truth stats snapshot to players so they can render charges/UI.
-            players_now = Game.list_players(socket.assigns.room_id)
-            stats_public =
-              Enum.map(players_now, fn p ->
-                s = get_truth_stats(p.id)
-                %{player_id: p.id, tp: s.tp, di: s.di, ps: s.ps, charges: s.charges}
-              end)
-            broadcast!(socket, "truth_stats_updated", %{stats: stats_public})
-            maybe_broadcast_discussion_refresh(socket, room, phase, effect_round)
-
-            {:reply, {:ok, %{used: true, remaining_charges: get_truth_stats(player_id).charges}}, socket}
-        end
-      end
-      end
-      end
+      {:error, reason} ->
+        {:reply, {:error, %{reason: reason}}, socket}
     end
   end
 
@@ -503,57 +450,19 @@ defmodule VnPartyWeb.GameChannel do
   @impl true
   def handle_in("set_fake_option_text", payload, socket) do
     %{"fake_text" => fake_text} = payload
-    room = Game.get_room!(socket.assigns.room_id)
-    player_id = socket.assigns.player_id
-    phase = current_truth_phase(room.id)
-    effect_round = distortion_effect_round(room, phase)
-    lock_key = {room.id, effect_round, player_id}
     maybe_record_latency(socket, "set_fake_option_text", payload, %{})
 
-    cond do
-      Game.room_mode(room) != "truth_collapse" ->
-        {:reply, {:error, %{reason: "Distortions are only available in Truth Collapse"}}, socket}
+    case TruthDistortionUse.complete_inject_fake(
+           socket.assigns.room_id,
+           socket.assigns.player_id,
+           socket.assigns.nickname,
+           fake_text
+         ) do
+      {:ok, body} ->
+        {:reply, {:ok, body}, socket}
 
-      phase not in ["results", "discussion", "transition"] ->
-        {:reply, {:error, %{reason: "Fake inject can only be used during the results phase"}}, socket}
-
-      true ->
-      case :ets.lookup(:truth_fake_locks, lock_key) do
-        [] ->
-          {:reply, {:error, %{reason: "You must lock this power first"}}, socket}
-
-        _ ->
-          case validate_distortion_payload("inject_fake_option", %{"fake_text" => fake_text}, room, player_id) do
-            {:error, reason} ->
-              {:reply, {:error, %{reason: reason}}, socket}
-
-            {:ok, cleaned_payload} ->
-              phase = current_truth_phase(room.id)
-              effect_round = distortion_effect_round(room, phase)
-
-              DistortionRules.record_use!(room.id, player_id, "inject_fake_option")
-              :ets.insert(:truth_distortions, {room.id, effect_round, player_id, "inject_fake_option", cleaned_payload})
-              :ets.delete(:truth_fake_locks, lock_key)
-
-              Game.create_event(room.id, "distortion_used", %{
-                action: "inject_fake_option",
-                round: effect_round,
-                payload: cleaned_payload
-              }, player_id)
-
-              log_payload = %{
-                round: effect_round,
-                player_id: player_id,
-                nickname: socket.assigns.nickname,
-                action: "inject_fake_option",
-                payload: cleaned_payload,
-                remaining_charges: get_truth_stats(player_id).charges
-              }
-
-              broadcast_to_both(socket, "distortion_used", log_payload, "display:distortion_used", log_payload)
-              {:reply, {:ok, %{used: true}}, socket}
-          end
-      end
+      {:error, reason} ->
+        {:reply, {:error, %{reason: reason}}, socket}
     end
   end
 
@@ -568,9 +477,14 @@ defmodule VnPartyWeb.GameChannel do
       room_id = room.id
       round = room.current_round
       player_id = socket.assigns.player_id
-      phase = current_truth_phase(room_id) || "results"
 
-      case TruthResults.record_results_ready(room_id, player_id, round) do
+      opts =
+        case payload do
+          %{"distortion" => %{"action" => _} = distortion} -> [distortion: distortion]
+          _ -> []
+        end
+
+      case TruthResults.record_results_ready(room_id, player_id, round, opts) do
         {:ok, body} ->
           {:reply, {:ok, body}, socket}
 

@@ -373,7 +373,7 @@ export function useGameSocket(props: UseGameSocketProps) {
             }, timeoutMs);
 
             channel
-                .push(event, { ...payload, client_timestamp_ms: Date.now() })
+                .push(event, { ...payload, client_timestamp_ms: Date.now() }, timeoutMs)
                 .receive('ok', (resp: unknown) => {
                     window.clearTimeout(timer);
                     finish(() => resolve(resp));

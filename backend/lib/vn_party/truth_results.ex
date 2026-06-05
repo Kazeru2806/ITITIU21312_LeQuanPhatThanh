@@ -5,6 +5,7 @@ defmodule VnParty.TruthResults do
   """
 
   alias VnParty.Game
+  alias VnParty.TruthDistortionUse
   alias VnPartyWeb.Endpoint
   alias Phoenix.PubSub
 
@@ -19,13 +20,27 @@ defmodule VnParty.TruthResults do
   Records a player ready for the next round during results phase.
   Idempotent: duplicate calls return success.
   """
-  def record_results_ready(room_id, player_id, round \\ nil) do
+  def record_results_ready(room_id, player_id, round \\ nil, opts \\ []) do
     room = Game.get_room!(room_id)
 
     if Game.room_mode(room) != "truth_collapse" do
       {:error, "Invalid mode"}
     else
       round = round || room.current_round
+      player = Game.get_player(player_id)
+      nickname = player && player.nickname
+
+      distortion_note =
+        case Keyword.get(opts, :distortion) do
+          %{"action" => action} = dist when is_binary(action) and is_binary(nickname) ->
+            case TruthDistortionUse.apply(room_id, player_id, nickname, action, dist) do
+              {:ok, _} -> "distortion_applied"
+              {:error, reason} -> reason
+            end
+
+          _ ->
+            nil
+        end
 
       already =
         case :ets.lookup(:truth_results_ack, {room_id, round, player_id}) do
@@ -43,7 +58,7 @@ defmodule VnParty.TruthResults do
        %{
          received: true,
          already_ready: already,
-         distortion_note: nil,
+         distortion_note: distortion_note,
          progress: progress
        }}
     end

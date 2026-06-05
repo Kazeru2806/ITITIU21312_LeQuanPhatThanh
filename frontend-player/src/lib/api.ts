@@ -86,7 +86,8 @@ class ApiClient {
   async truthResultsReady(
     roomCode: string,
     playerId: string,
-    round?: number
+    round?: number,
+    distortion?: Record<string, string>
   ): Promise<{
     success: boolean;
     received?: boolean;
@@ -100,6 +101,7 @@ class ApiClient {
       body: JSON.stringify({
         player_id: playerId,
         ...(round != null ? { round } : {}),
+        ...(distortion ? { distortion } : {}),
       }),
     });
   }

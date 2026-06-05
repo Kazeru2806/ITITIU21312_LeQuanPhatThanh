@@ -216,7 +216,13 @@ defmodule VnPartyWeb.RoomController do
                       room.current_round
                   end
 
-                case TruthResults.record_results_ready(room.id, player_id, round) do
+                opts =
+                  case Map.get(params, "distortion") do
+                    %{"action" => _} = distortion -> [distortion: distortion]
+                    _ -> []
+                  end
+
+                case TruthResults.record_results_ready(room.id, player_id, round, opts) do
                   {:ok, body} ->
                     json(conn, Map.put(body, :success, true))
 
