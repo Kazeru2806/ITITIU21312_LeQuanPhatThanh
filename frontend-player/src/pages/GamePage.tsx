@@ -661,7 +661,7 @@ export function GamePage() {
 
         setResultsReadyProgress((prev) => {
             const total =
-                prev?.total ?? useGameStore.getState().players.filter((p) => p.connected).length || 1;
+                (prev?.total ?? useGameStore.getState().players.filter((p) => p.connected).length) || 1;
             const ids = [...(prev?.acked_player_ids ?? [])];
             if (playerId && !ids.includes(playerId)) ids.push(playerId);
             return { acked: ids.length, total, acked_player_ids: ids };
