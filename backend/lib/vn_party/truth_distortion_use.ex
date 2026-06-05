@@ -116,7 +116,9 @@ defmodule VnParty.TruthDistortionUse do
       DistortionRules.record_use!(room_id, player_id, action)
     end
 
+    IO.puts("💾 persist_distortion: storing #{action} by #{player_id} for round #{effect_round}, payload=#{inspect(cleaned_payload)}")
     :ets.insert(:truth_distortions, {room_id, effect_round, player_id, action, cleaned_payload})
+    IO.puts("✅ persist_distortion: stored. ETS entries for room=#{:ets.lookup(:truth_distortions, room_id) |> length}")
 
     Game.create_event(room_id, "distortion_used", %{
       action: action,
@@ -201,16 +203,13 @@ defmodule VnParty.TruthDistortionUse do
   defp distortion_cost("merge_realities"), do: 4
   defp distortion_cost(_), do: 99
 
-  defp validate_payload("remove_option", payload, room, player_id) do
+  defp validate_payload("remove_option", payload, room, _player_id) do
     target = Map.get(payload, "target_player_id", Map.get(payload, :target_player_id))
     room_player_ids = room.id |> Game.list_players() |> Enum.map(& &1.id)
 
     cond do
       not is_binary(target) or target == "" ->
         {:error, "Please select a target player"}
-
-      target == player_id ->
-        {:error, "Cannot target yourself with Remove option"}
 
       target not in room_player_ids ->
         {:error, "Target player is not in this room"}

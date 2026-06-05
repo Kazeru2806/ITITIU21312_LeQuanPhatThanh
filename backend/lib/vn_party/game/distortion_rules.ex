@@ -5,7 +5,7 @@ defmodule VnParty.Game.DistortionRules do
   """
 
   @max_remove_per_player 1
-  @max_remove_total 8
+  @max_remove_total 999
   @max_swap_per_player 2
   @max_swap_per_room 4
   @max_force_blind_per_player 1
@@ -76,7 +76,7 @@ defmodule VnParty.Game.DistortionRules do
   end
 
   def denial_reason("remove_option") do
-    "Remove option limit reached (max #{@max_remove_per_player} per player, #{@max_remove_total} per game for the room)"
+    "Remove option limit reached (max #{@max_remove_per_player} per player per game)"
   end
 
   def denial_reason("swap_category") do

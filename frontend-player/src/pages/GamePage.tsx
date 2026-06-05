@@ -374,6 +374,7 @@ export function GamePage() {
                 | Record<string, string[]>
                 | undefined;
             const removeMap = (question as any).remove_targets as Record<string, string[]> | undefined;
+            console.log('🎯 Distortion debug:', { pid, personalized, removeMap, rawOptions: question.options });
 
             let filteredOpts: string[];
             if (pid && personalized?.[pid]?.length) {

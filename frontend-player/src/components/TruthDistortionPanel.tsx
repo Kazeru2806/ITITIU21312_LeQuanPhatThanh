@@ -145,7 +145,6 @@ export function TruthDistortionPanel({
           <p className="text-sm font-bold text-purple-800 mb-2">Choose target player (required)</p>
           <div className="grid grid-cols-2 gap-2">
             {players
-              .filter((p) => p.id !== myPlayerId)
               .slice()
               .sort((a, b) => a.nickname.localeCompare(b.nickname))
               .map((p) => (

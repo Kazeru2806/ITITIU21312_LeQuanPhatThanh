@@ -923,7 +923,22 @@ defmodule VnPartyWeb.GameChannel do
     if :ets.insert_new(:round_scored, {key, true}) do
       room = Game.get_room!(room_id)
 
-      {question, effects} = prepare_truth_round_question(room, round)
+      # Reuse the base question from the discussion phase (stored in truth_round_data)
+      # instead of regenerating — regeneration would advance the question history and
+      # potentially select a different question, causing discussion/answering mismatch.
+      {question, effects} =
+        case :ets.lookup(:truth_round_data, {room_id, round}) do
+          [{{^room_id, ^round}, %{question: stored_q}}] ->
+            IO.puts("🔄 truth_begin_answering: reusing stored question #{stored_q.id} for round #{round}")
+            apply_distortions_for_round(room_id, round, stored_q)
+
+          _ ->
+            IO.puts("⚠️ truth_begin_answering: no stored question for round #{round}, generating fresh")
+            prepare_truth_round_question(room, round)
+        end
+
+      IO.puts("🎯 truth_begin_answering: remove_targets=#{inspect(effects.remove_targets)}, blind_targets=#{inspect(effects.blind_targets)}")
+
       purge_distortions_for_round(room_id, round)
       :ets.insert(:truth_round_data, {{room_id, round}, %{question: question, effects: effects}})
 
@@ -933,6 +948,7 @@ defmodule VnPartyWeb.GameChannel do
       merged = merge_realities_used?(room_id, round)
 
       player_question = build_player_question_payload(room_id, question, effects)
+      IO.puts("📤 truth_begin_answering: broadcasting question_revealed with personalized_options=#{inspect(Map.get(player_question, :personalized_options))}")
 
       display_payload =
         Map.merge(question, %{
