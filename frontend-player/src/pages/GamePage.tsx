@@ -376,9 +376,10 @@ export function GamePage() {
 
             const q = { ...question, options: filteredOpts };
             setQuestion(q);
+            const limitSec = q.time_limit ?? 15;
             setPhaseEndsAtMs(
                 (question as { phase_ends_at_ms?: number }).phase_ends_at_ms ??
-                    Date.now() + q.time_limit * 1000
+                    Date.now() + limitSec * 1000
             );
             setShowResult(false);
             setPhase('answering');
@@ -814,9 +815,31 @@ export function GamePage() {
         );
     }
 
+    if (mode === 'truth_collapse' && phase === 'answering' && !currentQuestion) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6">
+                <PhoThePhoenix className="w-28 h-32 drop-shadow-lg mb-4" />
+                <h2
+                    className="text-3xl font-black text-center mb-2 text-purple-700"
+                    style={{ fontFamily: "'Bangers', cursive" }}
+                >
+                    Get ready to answer
+                </h2>
+                <p className="text-center text-gray-600 font-semibold max-w-md">
+                    Syncing the question from the room…
+                </p>
+                {!connected && (
+                    <p className="text-center text-amber-700 text-sm mt-4 font-semibold">
+                        Reconnecting to the game server…
+                    </p>
+                )}
+            </div>
+        );
+    }
+
     if (discussionPhaseActive) {
         return (
-            <div className="min-h-screen relative overflow-hidden flex flex-col p-4 lg:p-6">
+            <div className="min-h-screen relative overflow-hidden flex flex-col p-4 lg:p-6 bg-gradient-to-b from-purple-50 to-pink-50">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     <LotusPattern className="absolute top-10 left-10 w-20 h-20 animate-pulse" />
                     <DragonPattern className="absolute bottom-1/3 left-10 w-40 h-24 opacity-60" />
@@ -1007,7 +1030,7 @@ export function GamePage() {
     }
 
     return (
-        <div className="min-h-screen relative overflow-hidden flex flex-col p-4 lg:p-6">
+        <div className="min-h-screen relative overflow-hidden flex flex-col p-4 lg:p-6 bg-gradient-to-b from-purple-50 to-pink-50">
             {roomClosed && (
                 <RoomClosedBanner
                     message={roomClosed.message}
@@ -1116,12 +1139,20 @@ export function GamePage() {
             {/* Main Content */}
             <div className="flex-1 flex items-center justify-center relative z-10">
                 {!currentQuestion ? (
-                    <div className="text-center text-white">
+                    <div className="text-center text-purple-800">
                         <div className="mb-6 flex justify-center">
                             <PhoThePhoenix className="w-48 h-56 md:w-64 md:h-72 drop-shadow-2xl" />
                         </div>
-                        <h2 className="text-3xl lg:text-4xl font-black mb-2" style={{ fontFamily: "'Bangers', cursive" }}>Preparing question...</h2>
-                        <p className="text-xl lg:text-2xl font-semibold opacity-90">Pho is thinking...</p>
+                        <h2
+                            className="text-3xl lg:text-4xl font-black mb-2 text-purple-700"
+                            style={{ fontFamily: "'Bangers', cursive" }}
+                        >
+                            Preparing question…
+                        </h2>
+                        <p className="text-xl lg:text-2xl font-semibold text-gray-600">Pho is thinking…</p>
+                        {!connected && (
+                            <p className="text-amber-700 text-sm mt-4 font-semibold">Reconnecting to the game server…</p>
+                        )}
                     </div>
                 ) : (
                     <div className="w-full max-w-4xl lg:max-w-none lg:w-[95%] lg:max-w-[1600px]">
