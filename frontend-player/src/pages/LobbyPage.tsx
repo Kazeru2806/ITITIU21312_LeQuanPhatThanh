@@ -33,12 +33,17 @@ export function LobbyPage() {
         return useGameStore.persist.onFinishHydration(() => setStoreHydrated(true));
     }, []);
 
-    // Redirect if not properly joined
+    // Redirect only if session is still missing after hydration settles (avoid flash redirect after join).
     useEffect(() => {
         if (!storeHydrated) return;
-        if (!playerId || !roomCode || !nickname) {
-            navigate('/');
-        }
+        if (playerId && roomCode && nickname) return;
+        const id = window.setTimeout(() => {
+            const s = useGameStore.getState();
+            if (!s.playerId || !s.roomCode || !s.nickname) {
+                navigate('/');
+            }
+        }, 800);
+        return () => window.clearTimeout(id);
     }, [storeHydrated, playerId, roomCode, nickname, navigate]);
 
     useEffect(() => {
@@ -184,12 +189,50 @@ export function LobbyPage() {
         navigate('/');
     };
 
-    if (!storeHydrated || !playerId || !roomCode) {
-        return null;
+    useEffect(() => {
+        if (!storeHydrated || !roomCode) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await api.getPlayers(roomCode);
+                if (!cancelled && res.success && res.players?.length) {
+                    setPlayers(res.players);
+                }
+            } catch {
+                // WebSocket will sync players when connected
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [storeHydrated, roomCode, setPlayers]);
+
+    if (!storeHydrated) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6">
+                <p className="text-purple-800 font-bold text-lg">Restoring session…</p>
+            </div>
+        );
+    }
+
+    if (!playerId || !roomCode || !nickname) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6 gap-4">
+                <PhoThePhoenix className="w-24 h-28" />
+                <p className="text-purple-800 font-bold text-lg">Loading lobby…</p>
+                <button
+                    type="button"
+                    onClick={() => navigate('/')}
+                    className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold"
+                >
+                    Back to join screen
+                </button>
+            </div>
+        );
     }
 
     return (
-        <div className="min-h-screen relative overflow-hidden">
+        <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-purple-50 to-pink-50">
             {/* Decorative Background Patterns */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <LotusPattern className="absolute top-10 left-10 w-24 h-24 animate-pulse" />

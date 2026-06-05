@@ -126,6 +126,19 @@ export const useGameStore = create<GameStore>()(
         totalRounds: s.totalRounds,
         mode: s.mode,
       }),
+      // Rehydration must not wipe a join that just landed in memory (nulls in sessionStorage).
+      merge: (persisted, current) => {
+        const p = persisted as Partial<GameStore> | undefined;
+        if (!p) return current;
+        return {
+          ...current,
+          ...p,
+          playerId: current.playerId || p.playerId || null,
+          nickname: current.nickname || p.nickname || null,
+          roomCode: current.roomCode || p.roomCode || null,
+          isHost: current.playerId ? current.isHost : (p.isHost ?? false),
+        };
+      },
     }
   )
 );

@@ -50,9 +50,14 @@ export function JoinPage() {
         response.player.nickname,
         response.player.is_host
       );
-      setRoomCode(roomCode.toUpperCase());
+      const code = roomCode.toUpperCase();
+      setRoomCode(code);
 
-      // Navigate to lobby
+      // Let persist flush before lobby reads session (avoids blank screen on rehydrate race).
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+
       navigate('/lobby');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join room');
@@ -62,7 +67,7 @@ export function JoinPage() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-purple-50 to-pink-50">
       {/* Decorative Background Patterns */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <LotusPattern className="absolute top-10 left-10 w-24 h-24 animate-pulse" />
