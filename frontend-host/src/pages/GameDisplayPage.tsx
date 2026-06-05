@@ -325,7 +325,7 @@ export function GameDisplayPage() {
     onRoomResetToLobby: (data: any) => {
       if (data?.players) setPlayers(data.players);
       setGameState('lobby');
-      setRound(0, data.total_rounds ?? useDisplayStore.getState().totalRounds || 8);
+      setRound(0, (data.total_rounds ?? useDisplayStore.getState().totalRounds) || 8);
       navigate('/lobby', { replace: true });
     },
     onRoomClosed: () => {
