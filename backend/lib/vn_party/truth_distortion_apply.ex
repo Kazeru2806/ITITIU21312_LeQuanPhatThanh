@@ -137,39 +137,33 @@ defmodule VnParty.TruthDistortionApply do
   defp finalize_question(acc, blind_targets, player_ids) do
     q1 = acc.q
 
-    incorrect =
-      Enum.filter(q1.options, fn o ->
-        !(if is_list(q1.correct), do: o.id in q1.correct, else: o.id == q1.correct)
-      end)
+    correct_ids =
+      case Map.get(q1, :correct) do
+        ids when is_list(ids) -> MapSet.new(ids)
+        id when is_binary(id) -> MapSet.new([id])
+        _ -> MapSet.new()
+      end
 
-    min_options = min(length(q1.options), max(length(player_ids) + 1, 2))
-    max_removable = max(length(incorrect) - max(0, min_options - 1), 0)
-    remove_n = min(acc.remove_count, max_removable)
-
-    removed_ids =
-      incorrect
-      |> Enum.take(remove_n)
+    incorrect_ids =
+      q1.options
       |> Enum.map(& &1.id)
-      |> MapSet.new()
+      |> Enum.reject(&MapSet.member?(correct_ids, &1))
 
-    q2 = %{q1 | options: Enum.reject(q1.options, fn o -> MapSet.member?(removed_ids, o.id) end)}
-
-    incorrect_ids_q2 =
-      Enum.filter(q2.options, fn o ->
-        !(if is_list(q2.correct), do: o.id in q2.correct, else: o.id == q2.correct)
-      end)
-      |> Enum.map(& &1.id)
-
+    # Per-target only: each remove_option hides one wrong letter for that player.
+    # Multiple attackers may target the same victim; the correct option is never hidden.
     remove_targets =
       Enum.reduce(acc.remove_entries, %{}, fn %{target_player_id: t}, m ->
-        if is_binary(t) and t != "" and t in player_ids and incorrect_ids_q2 != [] do
+        if is_binary(t) and t != "" and t in player_ids and incorrect_ids != [] do
           current = Map.get(m, t, MapSet.new())
-          available = Enum.reject(incorrect_ids_q2, &MapSet.member?(current, &1))
+          available = Enum.reject(incorrect_ids, &MapSet.member?(current, &1))
 
           next_set =
             case available do
-              [] -> current
-              _ -> MapSet.put(current, Enum.at(available, :rand.uniform(length(available)) - 1))
+              [] ->
+                current
+
+              opts ->
+                MapSet.put(current, Enum.at(opts, :rand.uniform(length(opts)) - 1))
             end
 
           Map.put(m, t, next_set)
@@ -179,7 +173,7 @@ defmodule VnParty.TruthDistortionApply do
       end)
 
     {q3, fake_entries_applied, injected_ids} =
-      Enum.reduce(acc.fake_entries, {q2, [], MapSet.new()}, fn e, {q_acc, applied, used_ids} ->
+      Enum.reduce(acc.fake_entries, {q1, [], MapSet.new()}, fn e, {q_acc, applied, used_ids} ->
         victim = FakeInject.pick_victim(q_acc, e.fake_text, used_ids)
 
         case victim do

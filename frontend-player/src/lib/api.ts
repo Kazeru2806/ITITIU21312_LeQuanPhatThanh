@@ -82,7 +82,27 @@ class ApiClient {
     );
   }
 
-  /** HTTP fallback when WebSocket truth_results_ready push fails. */
+  /** Primary HTTP path for distortion powers (remove / swap / shuffle / inject). */
+  async useDistortion(
+    roomCode: string,
+    playerId: string,
+    distortion: Record<string, string>
+  ): Promise<{
+    success: boolean;
+    used?: boolean;
+    remaining_charges?: number;
+    error?: string;
+  }> {
+    return this.request(`/rooms/${roomCode.toUpperCase()}/use_distortion`, {
+      method: 'POST',
+      body: JSON.stringify({
+        player_id: playerId,
+        ...distortion,
+      }),
+    });
+  }
+
+  /** HTTP path for results-phase Done (optionally includes distortion if HTTP apply was skipped). */
   async truthResultsReady(
     roomCode: string,
     playerId: string,

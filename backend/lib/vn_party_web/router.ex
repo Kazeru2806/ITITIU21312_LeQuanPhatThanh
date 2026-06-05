@@ -16,6 +16,7 @@ defmodule VnPartyWeb.Router do
     get "/rooms/:code", RoomController, :show
     post "/rooms/:code/join", RoomController, :join
     post "/rooms/:code/truth_results_ready", RoomController, :truth_results_ready
+    post "/rooms/:code/use_distortion", RoomController, :use_distortion
     get "/rooms/:code/players", RoomController, :list_players
     get "/rooms/:code/audit", RoomController, :audit
     post "/rooms/:code/close", RoomController, :close

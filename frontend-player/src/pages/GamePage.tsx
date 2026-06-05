@@ -662,33 +662,55 @@ export function GamePage() {
             progress?: { acked_count: number; total: number; acked_player_ids?: string[] };
         } = {};
 
-        const readyBody = distortionPayload ? { distortion: distortionPayload } : {};
+        let powerApplied = false;
+
+        if (distortionPayload) {
+            try {
+                const applyRes = await api.useDistortion(roomCode, playerId, distortionPayload);
+                if (!applyRes.success) {
+                    throw new Error(applyRes.error || 'Power could not be applied');
+                }
+                powerApplied = true;
+                setPendingDistortion(null);
+            } catch (powerErr) {
+                const reason =
+                    powerErr instanceof Error ? powerErr.message : 'Power could not be applied';
+                setDistortionToast(`Power failed — ${reason}`);
+                console.error('use_distortion HTTP failed', powerErr);
+            }
+        }
+
+        const readyDistortion =
+            distortionPayload && !powerApplied ? distortionPayload : undefined;
 
         try {
-            const raw = await truthResultsReady(readyBody);
-            res = parseReadyResponse(raw);
-        } catch (wsErr) {
-            console.warn('truth_results_ready WS failed, trying HTTP fallback', wsErr);
+            const httpRes = await api.truthResultsReady(
+                roomCode,
+                playerId,
+                currentRound,
+                readyDistortion
+            );
+            if (!httpRes.success) {
+                throw new Error(httpRes.error || 'Ready vote failed');
+            }
+            res = {
+                distortion_note: httpRes.distortion_note ?? undefined,
+                progress: httpRes.progress,
+            };
+        } catch (httpErr) {
+            console.warn('truth_results_ready HTTP failed, trying WebSocket', httpErr);
             try {
-                const httpRes = await api.truthResultsReady(
-                    roomCode,
-                    playerId,
-                    currentRound,
-                    distortionPayload
-                );
-                if (!httpRes.success) {
-                    throw new Error(httpRes.error || 'Ready vote failed');
-                }
-                res = {
-                    distortion_note: httpRes.distortion_note ?? undefined,
-                    progress: httpRes.progress,
-                };
-            } catch (httpErr) {
+                const readyBody = readyDistortion ? { distortion: readyDistortion } : {};
+                const raw = await truthResultsReady(readyBody);
+                res = parseReadyResponse(raw);
+            } catch (wsErr) {
                 const msg =
-                    httpErr instanceof Error ? httpErr.message : 'Could not confirm — check connection.';
+                    wsErr instanceof Error
+                        ? wsErr.message
+                        : 'Could not confirm — check connection.';
                 setDistortionToast(msg);
                 setResultsReadyLocal(false);
-                console.error('truth_results_ready failed (WS + HTTP)', wsErr, httpErr);
+                console.error('truth_results_ready failed (HTTP + WS)', httpErr, wsErr);
                 setResultsReadySending(false);
                 return;
             }
@@ -702,7 +724,7 @@ export function GamePage() {
             });
         }
 
-        if (distortionPayload) {
+        if (!powerApplied && readyDistortion) {
             if (res.distortion_note === 'distortion_applied') {
                 setPendingDistortion(null);
             } else if (res.distortion_note) {

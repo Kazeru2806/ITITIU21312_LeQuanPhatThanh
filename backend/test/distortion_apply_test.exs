@@ -99,14 +99,30 @@ defmodule VnParty.DistortionApplyTest do
   end
 
   test "remove_option adds per-player remove_targets when players exist", %{room_id: room_id, round: round} do
-    # TruthDistortionApply reads connected players from DB; without a room this stays empty.
     :ets.insert(:truth_distortions, {room_id, round, "p1", "remove_option", %{"target_player_id" => "p2"}})
 
-    {_q, effects} =
+    {q, effects} =
       TruthDistortionApply.apply_for_round(room_id, round, base_question(), apply_opts())
 
     assert effects.remove_count == 1
     assert Map.has_key?(effects.remove_targets, "p2")
+    assert length(effects.remove_targets["p2"]) == 1
+    refute "B" in effects.remove_targets["p2"]
+    assert length(q.options) == 4
     assert Enum.any?(effects.log, &(&1.action == "remove_option" and &1.target_player_id == "p2"))
+  end
+
+  test "multiple remove_option on same target stacks wrong options but keeps correct", %{room_id: room_id, round: round} do
+    :ets.insert(:truth_distortions, {room_id, round, "p1", "remove_option", %{"target_player_id" => "p2"}})
+    :ets.insert(:truth_distortions, {room_id, round, "p3", "remove_option", %{"target_player_id" => "p2"}})
+    :ets.insert(:truth_distortions, {room_id, round, "p4", "remove_option", %{"target_player_id" => "p2"}})
+
+    {_q, effects} =
+      TruthDistortionApply.apply_for_round(room_id, round, base_question(), apply_opts())
+
+    removed = effects.remove_targets["p2"]
+    assert length(removed) == 3
+    refute "B" in removed
+    assert Enum.all?(removed, &(&1 in ["A", "C", "D"]))
   end
 end

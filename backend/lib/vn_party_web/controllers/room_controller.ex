@@ -2,6 +2,7 @@ defmodule VnPartyWeb.RoomController do
   use VnPartyWeb, :controller
   alias VnParty.Game
   alias VnParty.TruthResults
+  alias VnParty.TruthDistortionUse
 
   @doc """
   POST /api/rooms
@@ -223,6 +224,55 @@ defmodule VnPartyWeb.RoomController do
                   end
 
                 case TruthResults.record_results_ready(room.id, player_id, round, opts) do
+                  {:ok, body} ->
+                    json(conn, Map.put(body, :success, true))
+
+                  {:error, reason} ->
+                    conn
+                    |> put_status(:unprocessable_entity)
+                    |> json(%{success: false, error: reason})
+                end
+
+              _ ->
+                conn
+                |> put_status(:forbidden)
+                |> json(%{success: false, error: "Player not in this room"})
+            end
+        end
+    end
+  end
+
+  @doc """
+  POST /api/rooms/:code/use_distortion
+  Reliable HTTP path for distortion powers (avoids flaky WebSocket pushes).
+  Body: %{ "player_id" => "...", "action" => "remove_option", "target_player_id" => "..." }
+  """
+  def use_distortion(conn, %{"code" => code} = params) do
+    player_id = Map.get(params, "player_id")
+    action = Map.get(params, "action")
+
+    cond do
+      not is_binary(player_id) or player_id == "" ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{success: false, error: "player_id required"})
+
+      not is_binary(action) or action == "" ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{success: false, error: "action required"})
+
+      true ->
+        case Game.get_room_by_code(code) do
+          nil ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{success: false, error: "Room not found"})
+
+          room ->
+            case Game.get_player(player_id) do
+              %VnParty.Game.Player{room_id: rid, nickname: nickname} when rid == room.id ->
+                case TruthDistortionUse.apply(room.id, player_id, nickname, action, params) do
                   {:ok, body} ->
                     json(conn, Map.put(body, :success, true))
 
