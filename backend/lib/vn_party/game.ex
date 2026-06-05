@@ -444,6 +444,8 @@ end
         VnPartyWeb.Endpoint.broadcast("game:#{room_code}", "player_left", payload)
         VnPartyWeb.Endpoint.broadcast("display:#{room_code}", "display:player_left", payload)
 
+        Phoenix.PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:check_all_committed, room_id})
+
         {:ok, new_host}
 
       error ->

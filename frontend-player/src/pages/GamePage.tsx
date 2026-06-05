@@ -14,6 +14,8 @@ export function GamePage() {
     const navigate = useNavigate();
     const [storeHydrated, setStoreHydrated] = useState(() => useGameStore.persist.hasHydrated());
     const [phaseEndsAtMs, setPhaseEndsAtMs] = useState<number | null>(null);
+    const [resultsPhaseEndsAtMs, setResultsPhaseEndsAtMs] = useState<number | null>(null);
+    const [resultsReadyLocal, setResultsReadyLocal] = useState(false);
     const [roomClosed, setRoomClosed] = useState<{ message: string; redirect_seconds?: number } | null>(null);
     const [committedIds, setCommittedIds] = useState<Set<string>>(new Set());
     const [showResult, setShowResult] = useState(false);
@@ -70,7 +72,7 @@ export function GamePage() {
             setShowResult(true);
             setQuestion(null);
             setHasCommitted(false);
-            setPhaseEndsAtMs(endsAtMs ?? Date.now() + 45 * 1000);
+            setResultsPhaseEndsAtMs(endsAtMs ?? Date.now() + 45 * 1000);
         },
         [setQuestion, setHasCommitted]
     );
@@ -82,7 +84,7 @@ export function GamePage() {
     );
     const discussionLeft = usePhaseTimer(phase === 'discussion' ? phaseEndsAtMs : null, 15, phase === 'discussion');
     const resultsLeft = usePhaseTimer(
-        powerPhaseActive ? phaseEndsAtMs : null,
+        powerPhaseActive ? resultsPhaseEndsAtMs : null,
         45,
         powerPhaseActive
     );
@@ -95,10 +97,10 @@ export function GamePage() {
 
     useEffect(() => {
         if (!powerPhaseActive) return;
-        if (!phaseEndsAtMs || phaseEndsAtMs <= Date.now()) {
-            setPhaseEndsAtMs(Date.now() + 45 * 1000);
+        if (!resultsPhaseEndsAtMs) {
+            setResultsPhaseEndsAtMs(Date.now() + 45 * 1000);
         }
-    }, [powerPhaseActive, phaseEndsAtMs]);
+    }, [powerPhaseActive, resultsPhaseEndsAtMs]);
 
     useEffect(() => {
         if (phase !== 'answering' || powerPhaseActive || !currentQuestion) return;
@@ -252,7 +254,7 @@ export function GamePage() {
             setResultsReadySending(false);
             const connected = useGameStore.getState().players.filter((p) => p.connected).length;
             setResultsReadyProgress({ acked: 0, total: connected || useGameStore.getState().players.length || 0 });
-            setPhaseEndsAtMs(
+            setResultsPhaseEndsAtMs(
                 resume.phase_ends_at_ms ?? Date.now() + ((resume as { results_seconds?: number }).results_seconds ?? 45) * 1000
             );
         }
@@ -316,6 +318,8 @@ export function GamePage() {
             }
             setResultsReadySending(false);
             setResultsReadyProgress(null);
+            setResultsReadyLocal(false);
+            setResultsPhaseEndsAtMs(null);
             setPendingDistortion(null);
             setDistortionLocked(false);
             setDistortionTarget('');
@@ -337,6 +341,10 @@ export function GamePage() {
                 (data as { phase_ends_at_ms?: number }).phase_ends_at_ms ??
                     Date.now() + (data.discussion_seconds ?? 15) * 1000
             );
+            setResultsReadySending(false);
+            setResultsReadyProgress(null);
+            setResultsReadyLocal(false);
+            setResultsPhaseEndsAtMs(null);
             setPendingDistortion(null);
             setDistortionLocked(false);
             setDiscussionMeta({
@@ -428,6 +436,7 @@ export function GamePage() {
                 Date.now() + (data.results_seconds ?? 45) * 1000;
             enterPowerResultsPhase(endsAt);
             if (data?.stats) setTruthStats(data.stats);
+            setResultsReadyLocal(false);
             setPendingDistortion(null);
             setDistortionLocked(false);
             setDistortionTarget('');
@@ -455,6 +464,8 @@ export function GamePage() {
             setQuestion(null);
             setResultsReadySending(false);
             setResultsReadyProgress(null);
+            setResultsReadyLocal(false);
+            setResultsPhaseEndsAtMs(null);
             setPendingDistortion(null);
             setDistortionLocked(false);
             setDistortionTarget('');
@@ -475,10 +486,16 @@ export function GamePage() {
                 }
             }
         },
+        onAnsweringTimerUpdate: (data) => {
+            if (data.phase_ends_at_ms) {
+                setPhaseEndsAtMs(data.phase_ends_at_ms);
+            }
+        },
         onTruthResultsPhase: (data) => {
             if (data.mode) setMode('truth_collapse');
             enterPowerResultsPhase(data.phase_ends_at_ms);
             setResultsReadySending(false);
+            setResultsReadyLocal(false);
             const connected = useGameStore.getState().players.filter((p) => p.connected).length;
             setResultsReadyProgress({
                 acked: 0,
@@ -593,8 +610,8 @@ export function GamePage() {
     };
 
     const playerResultsReady =
-        !!playerId &&
-        (resultsReadyProgress?.acked_player_ids?.includes(playerId) ?? false);
+        resultsReadyLocal ||
+        (!!playerId && (resultsReadyProgress?.acked_player_ids?.includes(playerId) ?? false));
 
     const parseReadyResponse = (raw: unknown) => {
         if (!raw || typeof raw !== 'object') return {};
@@ -617,8 +634,28 @@ export function GamePage() {
         const hadPendingPower = !!pendingDistortion && !distortionLocked;
         const willApplyPower = canApplyPendingPower();
 
+        setResultsReadyLocal(true);
         setResultsReadySending(true);
         setDistortionToast(null);
+
+        if (hadPendingPower && willApplyPower) {
+            setDistortionLocked(true);
+            try {
+                await applyPendingPower();
+                setPendingDistortion(null);
+            } catch (powerErr) {
+                const reason =
+                    typeof powerErr === 'object' && powerErr !== null
+                        ? String(
+                              (powerErr as { reason?: string; message?: string }).reason ||
+                                  (powerErr as { message?: string }).message ||
+                                  'Power could not be applied'
+                          )
+                        : 'Power could not be applied';
+                setDistortionToast(`Power failed — ${reason}`);
+                console.error('applyPendingPower failed', powerErr);
+            }
+        }
 
         setResultsReadyProgress((prev) => {
             const total =
@@ -647,6 +684,7 @@ export function GamePage() {
                 const msg =
                     httpErr instanceof Error ? httpErr.message : 'Could not confirm — check connection.';
                 setDistortionToast(msg);
+                setResultsReadyLocal(false);
                 console.error('truth_results_ready failed (WS + HTTP)', wsErr, httpErr);
                 setResultsReadySending(false);
                 return;
@@ -661,29 +699,14 @@ export function GamePage() {
             });
         }
 
-        if (hadPendingPower && willApplyPower) {
-            setDistortionLocked(true);
-            try {
-                await applyPendingPower();
-                setPendingDistortion(null);
-            } catch (powerErr) {
-                const reason =
-                    typeof powerErr === 'object' && powerErr !== null
-                        ? String((powerErr as { reason?: string; message?: string }).reason ||
-                              (powerErr as { message?: string }).message ||
-                              'Power could not be applied')
-                        : 'Power could not be applied';
-                setDistortionToast(`Ready counted — ${reason}`);
-                console.error('applyPendingPower failed', powerErr);
-            }
-        } else if (hadPendingPower && !willApplyPower) {
+        if (hadPendingPower && !willApplyPower) {
             const hint =
                 pendingDistortion === 'remove_option'
-                    ? 'Pick a target player first, or tap Done again without a power to skip it.'
+                    ? 'Ready counted — pick a target before Done to use Remove option.'
                     : pendingDistortion === 'inject_fake_option'
-                      ? 'Lock the power and enter fake text (e.g. 5), then tap Done again.'
-                      : 'Complete your power setup, or tap Done again without a power to skip it.';
-            setDistortionToast(`Marked ready — ${hint}`);
+                      ? 'Ready counted — lock inject and enter text before Done to use it.'
+                      : 'Ready counted — complete power setup to apply it next time.';
+            setDistortionToast(hint);
         }
 
         setResultsReadySending(false);

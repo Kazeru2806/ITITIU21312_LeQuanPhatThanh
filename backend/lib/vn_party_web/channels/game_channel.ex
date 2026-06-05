@@ -247,18 +247,7 @@ defmodule VnPartyWeb.GameChannel do
         all_committed = MapSet.equal?(connected_player_ids, committed_player_ids) and MapSet.size(connected_player_ids) > 0
 
         if all_committed do
-          # Use ETS to atomically check and mark that auto-reveal is scheduled
-          # This prevents multiple processes from scheduling the same auto-reveal
-          auto_reveal_key = {:auto_reveal_scheduled, room_id, room.current_round}
-          case :ets.insert_new(:round_scored, {auto_reveal_key, true}) do
-            true ->
-              IO.puts("✅ All connected players committed! Auto-revealing in 2 seconds...")
-              # All connected players committed, trigger auto-reveal after 2 seconds
-              # This gives time for the UI to update before showing results
-              Process.send_after(self(), {:auto_reveal, room.current_round, question_id}, 2000)
-            false ->
-              IO.puts("⏳ Auto-reveal already scheduled by another process")
-          end
+          schedule_auto_reveal_if_needed(room_id, room.current_round, question_id, socket)
         else
           IO.puts("⏳ Waiting for more players... #{MapSet.size(committed_player_ids)}/#{MapSet.size(connected_player_ids)}")
         end
@@ -682,62 +671,14 @@ defmodule VnPartyWeb.GameChannel do
       {:reply, {:error, %{reason: "Invalid mode"}}, socket}
     else
       maybe_record_latency(socket, "truth_discussion_ready", payload, %{})
-      room_id = room.id
-      round = room.current_round
-      player_id = socket.assigns.player_id
-
-      phase = current_truth_phase(room_id)
-
-      if phase != "discussion" do
-        {:reply, {:error, %{reason: "Not in discussion phase"}}, socket}
-      else
-        distortion_note =
-          case payload do
-            %{"distortion" => %{"action" => action} = d} when is_binary(action) ->
-              case apply_distortion_for_player(socket, room, phase, action, d) do
-                :ok -> nil
-                {:error, reason} -> reason
-              end
-
-            _ ->
-              nil
-          end
-
-        :ets.insert(:truth_discussion_ack, {{room_id, round, player_id}, true})
-
-            players = Game.list_players(room_id)
-            connected = Enum.filter(players, & &1.connected)
-
-            acked_ids =
-              Enum.filter(connected, fn p ->
-                case :ets.lookup(:truth_discussion_ack, {room_id, round, p.id}) do
-                  [_] -> true
-                  [] -> false
-                end
-              end)
-              |> Enum.map(& &1.id)
-
-            progress = %{
-              round: round,
-              acked_count: length(acked_ids),
-              total: length(connected),
-              acked_player_ids: acked_ids
-            }
-
-            broadcast_to_both(
-              socket,
-              "truth_discussion_progress",
-              progress,
-              "display:truth_discussion_progress",
-              progress
-            )
-
-            if length(connected) > 0 and length(acked_ids) >= length(connected) do
-              PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:truth_begin_answering, room_id, round})
-            end
-
-            {:reply, {:ok, %{received: true, distortion_note: distortion_note}}, socket}
-      end
+      # Discussion no longer has a Done button or distortion powers — ignore legacy clients.
+      {:reply,
+       {:ok,
+        %{
+          received: true,
+          deprecated: true,
+          distortion_note: "Discussion ready was removed. Wait for the discussion timer."
+        }}, socket}
     end
   end
 
@@ -1190,6 +1131,25 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   @impl true
+  def handle_info({:check_all_committed, room_id}, socket) do
+    if socket.assigns[:room_id] == room_id do
+      room = Game.get_room!(room_id)
+      round = room.current_round
+
+      if Game.room_mode(room) == "truth_collapse" and current_truth_phase(room_id) == "answering" do
+        case :ets.lookup(:truth_round_data, {room_id, round}) do
+          [{{^room_id, ^round}, %{question: q}}] ->
+            schedule_auto_reveal_if_needed(room_id, round, q.id, socket)
+
+          _ ->
+            :ok
+        end
+      end
+    end
+
+    {:noreply, socket}
+  end
+
   def handle_info({:check_rematch, room_id}, socket) do
     votes =
       case :ets.lookup(:rematch_votes, room_id) do
@@ -1368,8 +1328,22 @@ defmodule VnPartyWeb.GameChannel do
 
   defp current_truth_phase(room_id) do
     case :ets.lookup(:truth_room_phase, room_id) do
-      [{^room_id, %{phase: phase}}] when is_binary(phase) -> phase
-      _ -> nil
+      [{^room_id, %{phase: phase}}] when is_binary(phase) ->
+        phase
+
+      _ ->
+        room = Game.get_room!(room_id)
+
+        cond do
+          :ets.lookup(:truth_last_results, {room_id, room.current_round}) != [] ->
+            "results"
+
+          :ets.lookup(:truth_round_data, {room_id, room.current_round}) != [] ->
+            "answering"
+
+          true ->
+            nil
+        end
     end
   end
 
@@ -1390,6 +1364,49 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   defp distortion_effect_round(room, _), do: room.current_round
+
+  defp schedule_auto_reveal_if_needed(room_id, round, question_id, socket) do
+    connected_player_ids =
+      room_id
+      |> Game.round_active_players(round)
+      |> Enum.map(& &1.id)
+      |> MapSet.new()
+
+    committed_player_ids =
+      room_id
+      |> Game.get_round_commits(round)
+      |> Enum.map(& &1.player_id)
+      |> MapSet.new()
+
+    all_committed =
+      MapSet.size(connected_player_ids) > 0 and
+        MapSet.equal?(connected_player_ids, committed_player_ids)
+
+    if all_committed do
+      auto_reveal_key = {:auto_reveal_scheduled, room_id, round}
+
+      case :ets.insert_new(:round_scored, {auto_reveal_key, true}) do
+        true ->
+          IO.puts("✅ All connected players committed! Auto-revealing in 2 seconds...")
+          short_end = System.system_time(:millisecond) + 3_000
+
+          broadcast!(socket, "answering_timer_update", %{
+            round: round,
+            phase_ends_at_ms: short_end
+          })
+
+          Endpoint.broadcast("display:#{socket.assigns.room_code}", "display:answering_timer_update", %{
+            round: round,
+            phase_ends_at_ms: short_end
+          })
+
+          Process.send_after(self(), {:auto_reveal, round, question_id}, 2_000)
+
+        false ->
+          IO.puts("⏳ Auto-reveal already scheduled by another process")
+      end
+    end
+  end
 
   defp schedule_results_auto_advance(room_id, round) do
     key = {:results_auto_advance_scheduled, room_id, round}

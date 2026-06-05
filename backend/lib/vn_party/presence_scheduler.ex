@@ -93,6 +93,8 @@ defmodule VnParty.PresenceScheduler do
     Endpoint.broadcast("display:#{room_code}", "display:player_disconnected", payload)
     Presence.broadcast_players_sync(room_id)
 
+    Phoenix.PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:check_all_committed, room_id})
+
     kick_ref = Process.send_after(self(), {:kick, player_id, room_id}, @absent_kick_ms)
 
     {:noreply,

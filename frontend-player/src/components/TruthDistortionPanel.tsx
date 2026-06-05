@@ -208,11 +208,16 @@ export function TruthDistortionPanel({
         <button
           type="button"
           disabled={readySent || readySubmitting}
-          onClick={() => {
+          onPointerUp={(e) => {
+            e.preventDefault();
             if (readySent || readySubmitting) return;
             onDone();
           }}
-          className="w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white disabled:opacity-60 shadow-lg touch-manipulation cursor-pointer relative z-30 transition-transform active:scale-95 active:opacity-90"
+          className={`w-full py-4 rounded-xl font-black text-lg bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg touch-manipulation cursor-pointer relative z-30 transition-all ${
+            readySent || readySubmitting
+              ? 'opacity-60'
+              : 'hover:brightness-105 active:scale-95 active:opacity-90'
+          }`}
         >
           {readySubmitting
             ? 'Sending…'

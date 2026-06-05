@@ -18,6 +18,21 @@ defmodule VnParty.FakeInjectTest do
     assert victim.id == "B"
   end
 
+  test "matching text hijacks that option letter even when it is the correct answer" do
+    q = %{
+      correct: "B",
+      options: [
+        %{id: "A", text: "three"},
+        %{id: "B", text: "5"},
+        %{id: "C", text: "6"}
+      ]
+    }
+
+    victim = FakeInject.pick_victim(q, "5")
+    assert victim.id == "B"
+    assert victim.text == "5"
+  end
+
   test "falls back to a wrong option when text does not match" do
     q = %{
       correct: "B",

@@ -38,9 +38,10 @@ export function GameDisplayPage() {
     timelineLabels?: string[];
   } | null>(null);
   const [truthReadyProgress, setTruthReadyProgress] = useState<{ acked: number; total: number } | null>(null);
-  const [discussionReadyProgress, setDiscussionReadyProgress] = useState<{ acked: number; total: number } | null>(null);
   const [discussionEndsAtMs, setDiscussionEndsAtMs] = useState<number | null>(null);
+  const [resultsEndsAtMs, setResultsEndsAtMs] = useState<number | null>(null);
   const discussionLeft = usePhaseTimer(phase === 'discussion' ? discussionEndsAtMs : null, 15);
+  const resultsLeft = usePhaseTimer(phase === 'results' ? resultsEndsAtMs : null, 45);
   const isTruth = mode === 'truth_collapse';
 
   useEffect(() => {
@@ -170,6 +171,9 @@ export function GameDisplayPage() {
           if (d.counts && typeof d.counts === 'object') {
             setOptionCounts((prev) => ({ ...prev, ...d.counts }));
           }
+          const endsAt =
+            tr.phase_ends_at_ms ?? Date.now() + (tr.results_seconds ?? 45) * 1000;
+          setResultsEndsAtMs(endsAt);
           setTimeLeft(0);
           setLocalTimeLeft(0);
           return;
@@ -224,7 +228,6 @@ export function GameDisplayPage() {
       setDiscussionEndsAtMs(
         (data as { phase_ends_at_ms?: number }).phase_ends_at_ms ?? Date.now() + secs * 1000
       );
-      setDiscussionReadyProgress(null);
       setTruthDiscussionMeta({
         categoryLabel: data.category_label,
         timelineLabels: data.category_timeline_labels ?? [],
@@ -265,6 +268,9 @@ export function GameDisplayPage() {
         setLeaderboard(data.leaderboard || []);
         setPhase('results');
         setTruthReadyProgress(null);
+        const endsAt =
+          data.phase_ends_at_ms ?? Date.now() + (data.results_seconds ?? 45) * 1000;
+        setResultsEndsAtMs(endsAt);
       } else {
         setRoundScores(data.scores);
         setLeaderboard(data.leaderboard);
@@ -278,6 +284,7 @@ export function GameDisplayPage() {
       setRoundScores(null);
       setCommittedPlayers(new Set());
       setTruthReadyProgress(null);
+      setResultsEndsAtMs(null);
       if (data.mode === 'truth_collapse' || mode === 'truth_collapse') {
         setPhase('discussion');
         setQuestion(null);
@@ -297,8 +304,11 @@ export function GameDisplayPage() {
     onTruthResultsProgress: (data: any) => {
       setTruthReadyProgress({ acked: data.acked_count ?? 0, total: data.total ?? 0 });
     },
-    onTruthDiscussionProgress: (data: any) => {
-      setDiscussionReadyProgress({ acked: data.acked_count ?? 0, total: data.total ?? 0 });
+    onAnsweringTimerUpdate: (data: any) => {
+      if (data?.phase_ends_at_ms) {
+        const left = Math.max(0, Math.ceil((data.phase_ends_at_ms - Date.now()) / 1000));
+        setLocalTimeLeft(left);
+      }
     },
     onGameEnded: (data: any) => {
       setLeaderboard(data.final_scores);
@@ -327,7 +337,7 @@ export function GameDisplayPage() {
     onRoundStarted: callbacksRef.current.onRoundStarted,
     onGameEnded: callbacksRef.current.onGameEnded,
     onTruthResultsProgress: callbacksRef.current.onTruthResultsProgress,
-    onTruthDiscussionProgress: callbacksRef.current.onTruthDiscussionProgress,
+    onAnsweringTimerUpdate: callbacksRef.current.onAnsweringTimerUpdate,
     onRoomClosed: callbacksRef.current.onRoomClosed,
   });
 
@@ -461,11 +471,6 @@ export function GameDisplayPage() {
               <p className="text-2xl text-gray-600 mb-4">
                 Discussion ends in <span className="text-pink-700 font-black">{discussionLeft}s</span>
               </p>
-              {discussionReadyProgress && discussionReadyProgress.total > 0 ? (
-                <p className="text-xl font-bold text-purple-800 mb-4">
-                  Ready to answer: {discussionReadyProgress.acked}/{discussionReadyProgress.total}
-                </p>
-              ) : null}
               <p className="text-lg text-gray-500 mb-10 max-w-2xl mx-auto">
                 The full question is hidden until the answer phase—use this time to talk, bluff, and lock in a prediction on your phone.
               </p>
@@ -502,21 +507,6 @@ export function GameDisplayPage() {
                 </div>
               </div>
 
-              {distortionLog.length > 0 && (
-                <div className="mt-8 text-left">
-                  <p className="text-2xl font-black text-purple-700 mb-3">Distortion log</p>
-                  <div className="space-y-2">
-                    {distortionLog.slice(0, 5).map((d: any, idx: number) => (
-                      <div key={idx} className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border-2 border-purple-200">
-                        <p className="font-bold text-gray-800">{d.nickname} used: {d.action}</p>
-                        <p className="text-sm text-gray-600">
-                          Remaining: {d.remaining_charges ?? '??'} charges
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           ) : phase === 'results' && roundScores ? (
             <div className="bg-white rounded-3xl shadow-2xl p-12 border-4 border-purple-300">
@@ -524,9 +514,17 @@ export function GameDisplayPage() {
                 Round {currentRound} Results
               </h2>
 
+              <div className="flex justify-center mb-6">
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center text-4xl font-black text-white border-4 border-purple-300 shadow-lg">
+                  {resultsLeft}
+                </div>
+              </div>
+              <p className="text-center text-xl font-bold text-purple-800 mb-2">
+                Power phase — next round in {resultsLeft}s
+              </p>
               {truthReadyProgress && truthReadyProgress.total > 0 ? (
-                <p className="text-center text-xl font-bold text-purple-800 mb-6">
-                  Players ready for next round: {truthReadyProgress.acked}/{truthReadyProgress.total}
+                <p className="text-center text-lg font-bold text-purple-700 mb-6">
+                  Players ready: {truthReadyProgress.acked}/{truthReadyProgress.total}
                 </p>
               ) : null}
 

@@ -130,6 +130,7 @@ interface UseGameSocketProps {
         results_seconds: number;
         mode?: string;
     }) => void;
+    onAnsweringTimerUpdate?: (data: { round: number; phase_ends_at_ms: number }) => void;
     onTruthResume?: (resume: TruthResume) => void;
     onPlayersSync?: (data: {
         players: PlayerJoinedData['players'];
@@ -162,6 +163,7 @@ export function useGameSocket({
     onTruthResultsProgress,
     onTruthDiscussionProgress,
     onTruthResultsPhase,
+    onAnsweringTimerUpdate,
     onTruthResume,
     onPlayersSync,
     onHostChanged,
@@ -200,6 +202,7 @@ export function useGameSocket({
         onTruthResultsProgress,
         onTruthDiscussionProgress,
         onTruthResultsPhase,
+        onAnsweringTimerUpdate,
         onTruthResume,
         onPlayersSync,
         onHostChanged,
@@ -324,6 +327,10 @@ export function useGameSocket({
 
         channel.on('truth_results_phase', (data: any) => {
             cbRef.current.onTruthResultsPhase?.(data);
+        });
+
+        channel.on('answering_timer_update', (data: any) => {
+            cbRef.current.onAnsweringTimerUpdate?.(data);
         });
 
         channel.on('truth_discussion_progress', (data: any) => {
