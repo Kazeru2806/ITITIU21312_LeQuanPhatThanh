@@ -49,8 +49,10 @@ defmodule VnParty.Game.DistortionRules do
   end
 
   def record_use!(room_id, player_id, action) do
-    :ets.update_counter(:distortion_usage, {room_id, player_id, action}, 1, {0})
-    :ets.update_counter(:distortion_usage, {room_id, :total, action}, 1, {0})
+    player_key = {room_id, player_id, action}
+    total_key = {room_id, :total, action}
+    :ets.update_counter(:distortion_usage, player_key, 1, {player_key, 0})
+    :ets.update_counter(:distortion_usage, total_key, 1, {total_key, 0})
     :ok
   end
 

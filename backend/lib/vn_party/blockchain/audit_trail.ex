@@ -34,7 +34,7 @@ defmodule VnParty.Blockchain.AuditTrail do
              chain_hash: chain_hash,
              status: "pending"
            })
-           |> Repo.insert(on_conflict: :nothing) do
+           |> Repo.insert(on_conflict: :nothing, conflict_target: :event_id) do
       if EvmClient.enabled?() do
         case EvmClient.anchor_hash(chain_hash) do
           {:ok, tx_hash} ->

@@ -6,11 +6,12 @@ defmodule VnParty.Game.Event do
   @foreign_key_type :binary_id
 
   @event_types ~w(
-    room_created player_joined player_left
+    room_created player_joined player_left player_rejoined
     game_started round_started question_revealed
     answer_committed answer_revealed
     scoring_completed round_ended game_ended
     player_reconnected player_disconnected
+    state_changed room_closed distortion_used
   )
 
   schema "game_events" do
