@@ -417,6 +417,7 @@ defmodule VnPartyWeb.GameChannel do
                 %{player_id: p.id, tp: s.tp, di: s.di, ps: s.ps, charges: s.charges}
               end)
             broadcast!(socket, "truth_stats_updated", %{stats: stats_public})
+            maybe_broadcast_discussion_refresh(socket, room, phase, effect_round)
 
             {:reply, {:ok, %{used: true, remaining_charges: get_truth_stats(player_id).charges}}, socket}
         end
@@ -584,7 +585,7 @@ defmodule VnPartyWeb.GameChannel do
     room_id = room.id
 
     cond do
-      phase not in ["discussion", "results"] ->
+      phase not in ["discussion", "results", "transition"] ->
         {:error, "Distortions can only be used during discussion or results"}
 
       action == "inject_fake_option" ->
@@ -658,8 +659,73 @@ defmodule VnPartyWeb.GameChannel do
           end)
 
         broadcast!(socket, "truth_stats_updated", %{stats: stats_public})
+        maybe_broadcast_discussion_refresh(socket, room, phase, effect_round)
         :ok
     end
+  end
+
+  defp maybe_broadcast_discussion_refresh(socket, room, phase, effect_round) do
+    if phase in ["discussion", "transition"] and effect_round == room.current_round do
+      broadcast_discussion_refresh(socket, room, effect_round)
+    end
+
+    :ok
+  end
+
+  defp broadcast_discussion_refresh(socket, room, round) do
+    room_id = room.id
+    {question, effects} = prepare_truth_round_question(room, round)
+    set_truth_active_category(room_id, question.category)
+    :ets.insert(:truth_round_data, {{room_id, round}, %{question: question, effects: effects}})
+
+    timeline_labels = Enum.map(effects.category_timeline, &truth_category_label/1)
+    discussion_seconds = 15
+
+    phase_ends_at_ms =
+      case :ets.lookup(:truth_discussion_mono, room_id) do
+        [{^room_id, started_ms}] ->
+          elapsed = System.monotonic_time(:millisecond) - started_ms
+          remaining_ms = max(discussion_seconds * 1000 - elapsed, 0)
+          System.system_time(:millisecond) + remaining_ms
+
+        _ ->
+          System.system_time(:millisecond) + discussion_seconds * 1000
+      end
+
+    player_payload = %{
+      round: round,
+      discussion_seconds: discussion_seconds,
+      phase_ends_at_ms: phase_ends_at_ms,
+      mode: "truth_collapse",
+      question_id: question.id,
+      category: question.category,
+      category_label: truth_category_label(question.category),
+      category_timeline: effects.category_timeline,
+      category_timeline_labels: timeline_labels,
+      options: Enum.map(question.options, & &1.id),
+      distortion_refresh: true
+    }
+
+    display_payload =
+      %{
+        round: round,
+        discussion_seconds: discussion_seconds,
+        phase_ends_at_ms: phase_ends_at_ms,
+        mode: "truth_collapse",
+        question: nil,
+        discussion_only: true,
+        option_count: length(question.options),
+        applied_distortions: effects.log,
+        blind_targets: MapSet.to_list(effects.blind_targets),
+        shuffle_targets: MapSet.to_list(effects.blind_targets),
+        category: question.category,
+        category_label: truth_category_label(question.category),
+        category_timeline: effects.category_timeline,
+        category_timeline_labels: timeline_labels,
+        distortion_refresh: true
+      }
+
+    broadcast_to_both(socket, "discussion_started", player_payload, "display:discussion_started", display_payload)
   end
 
   @impl true
@@ -670,8 +736,26 @@ defmodule VnPartyWeb.GameChannel do
       {:reply, {:error, %{reason: "Invalid mode"}}, socket}
     else
       maybe_record_latency(socket, "truth_discussion_ready", payload, %{})
-      # Discussion no longer has a Done button or distortion powers — ignore legacy clients.
-      {:reply, {:ok, %{received: true}}, socket}
+      phase = current_truth_phase(room.id) || "discussion"
+
+      distortion_note =
+        case payload do
+          %{"distortion" => %{"action" => action} = dist} when is_binary(action) ->
+            case apply_distortion_for_player(socket, room, phase, action, dist) do
+              :ok ->
+                effect_round = distortion_effect_round(room, phase)
+                maybe_broadcast_discussion_refresh(socket, room, phase, effect_round)
+                "distortion_applied"
+
+              {:error, reason} ->
+                reason
+            end
+
+          _ ->
+            nil
+        end
+
+      {:reply, {:ok, %{received: true, distortion_note: distortion_note}}, socket}
     end
   end
 

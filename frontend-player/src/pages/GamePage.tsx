@@ -63,7 +63,9 @@ export function GamePage() {
         setGameState,
     } = useGameStore();
 
+    // Powers only on results — never on discussion (server phase: results only).
     const powerPhaseActive = mode === 'truth_collapse' && phase === 'results';
+    const discussionPhaseActive = mode === 'truth_collapse' && phase === 'discussion';
 
     const enterPowerResultsPhase = useCallback(
         (endsAtMs?: number) => {
@@ -361,9 +363,7 @@ export function GamePage() {
             setFakePreview(null);
         },
         onQuestionRevealed: (question) => {
-            if (powerPhaseLockRef.current) {
-                return;
-            }
+            powerPhaseLockRef.current = false;
             console.log('❓ Question revealed:', question);
             const removeMap = (question as any).remove_targets as Record<string, string[]> | undefined;
             const pid = useGameStore.getState().playerId;
@@ -660,8 +660,8 @@ export function GamePage() {
         }
 
         setResultsReadyProgress((prev) => {
-            const total =
-                (prev?.total ?? useGameStore.getState().players.filter((p) => p.connected).length) || 1;
+            const connectedCount = useGameStore.getState().players.filter((p) => p.connected).length;
+            const total = prev?.total ?? (connectedCount || 1);
             const ids = [...(prev?.acked_player_ids ?? [])];
             if (playerId && !ids.includes(playerId)) ids.push(playerId);
             return { acked: ids.length, total, acked_player_ids: ids };
@@ -814,7 +814,7 @@ export function GamePage() {
         );
     }
 
-    if (mode === 'truth_collapse' && phase === 'discussion') {
+    if (discussionPhaseActive) {
         return (
             <div className="min-h-screen relative overflow-hidden flex flex-col p-4 lg:p-6">
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
