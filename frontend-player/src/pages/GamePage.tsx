@@ -183,6 +183,7 @@ export function GamePage() {
             return;
         }
         if (resume.phase === 'discussion') {
+            powerPhaseLockRef.current = false;
             setPhase('discussion');
             setQuestion(null);
             setShowResult(false);
@@ -492,6 +493,8 @@ export function GamePage() {
             }
         },
         onTruthResultsPhase: (data) => {
+            const activeRound = useGameStore.getState().currentRound;
+            if (data.round != null && data.round !== activeRound) return;
             if (data.mode) setMode('truth_collapse');
             enterPowerResultsPhase(data.phase_ends_at_ms);
             setResultsReadySending(false);
@@ -504,15 +507,14 @@ export function GamePage() {
             });
         },
         onTruthResultsProgress: (data) => {
+            const activeRound = useGameStore.getState().currentRound;
+            if (data.round != null && data.round !== activeRound) return;
             setResultsReadyProgress({
                 acked: data.acked_count,
                 total: data.total,
                 acked_player_ids: data.acked_player_ids,
             });
             setResultsReadySending(false);
-            if (useGameStore.getState().mode === 'truth_collapse' && !powerPhaseLockRef.current) {
-                enterPowerResultsPhase();
-            }
         },
         onTruthStatsUpdated: (data) => {
             if (data?.stats) setTruthStats(data.stats);
@@ -1151,28 +1153,6 @@ export function GamePage() {
                                         Look at the host screen for the question
                                     </p>
                                 </div>
-
-                                {mode === 'truth_collapse' && phase === 'discussion' && (
-                                    <div className="mb-6 p-6 rounded-xl border-2 border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 text-center">
-                                        <p className="text-2xl font-black text-purple-700 mb-2">Discussion: {discussionLeft}s</p>
-                                        <p className="text-gray-700 font-semibold mb-4">Make a prediction: which option will be most picked?</p>
-                                        <div className="grid grid-cols-4 gap-3">
-                                            {['A', 'B', 'C', 'D'].map((opt) => (
-                                                <button
-                                                    key={opt}
-                                                    onClick={() => handleSubmitPrediction(opt)}
-                                                    className={`py-3 rounded-xl border-2 font-black ${
-                                                        prediction === opt
-                                                            ? 'bg-purple-600 text-white border-purple-600'
-                                                            : 'bg-white text-purple-700 border-purple-200 hover:border-purple-400'
-                                                    }`}
-                                                >
-                                                    {opt}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
 
                                 {/* Answer Options */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">

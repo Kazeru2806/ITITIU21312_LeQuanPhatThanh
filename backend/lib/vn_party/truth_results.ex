@@ -75,9 +75,22 @@ defmodule VnParty.TruthResults do
     Endpoint.broadcast("display:#{room_code}", "display:truth_results_progress", progress)
   end
 
+  @ready_advance_grace_ms 3_000
+
   defp maybe_auto_advance(room_id, round, %{acked_count: acked, total: total}) do
     if total > 0 and acked >= total do
-      PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:auto_advance_round, room_id, round})
+      key = {:ready_auto_advance_scheduled, room_id, round}
+
+      case :ets.insert_new(:round_scored, {key, true}) do
+        true ->
+          spawn(fn ->
+            Process.sleep(@ready_advance_grace_ms)
+            PubSub.broadcast(VnParty.PubSub, "room:#{room_id}:internal", {:auto_advance_round, room_id, round})
+          end)
+
+        false ->
+          :ok
+      end
     end
   end
 end

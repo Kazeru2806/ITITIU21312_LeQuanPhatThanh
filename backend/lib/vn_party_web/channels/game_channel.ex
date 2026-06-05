@@ -2,7 +2,6 @@ defmodule VnPartyWeb.GameChannel do
   use VnPartyWeb, :channel
   alias VnParty.Game
   alias VnParty.TruthResults
-  alias VnParty.FakeInject
   alias VnParty.Game.Presence
   alias VnParty.Game.DistortionRules
   alias VnParty.Game.AnswerCommit
@@ -363,7 +362,7 @@ defmodule VnPartyWeb.GameChannel do
     else
       phase = current_truth_phase(room.id)
 
-      if phase != "results" do
+      if phase not in ["results", "discussion", "transition"] do
         {:reply, {:error, %{reason: "Distortions can only be used during the results phase"}}, socket}
       else
       maybe_record_latency(socket, "use_distortion", payload, %{action: action})
@@ -441,7 +440,7 @@ defmodule VnPartyWeb.GameChannel do
       room.current_round >= room.total_rounds ->
         {:reply, {:error, %{reason: "No next round available"}}, socket}
 
-      current_truth_phase(room.id) != "results" ->
+      current_truth_phase(room.id) not in ["results", "discussion", "transition"] ->
         {:reply, {:error, %{reason: "Fake inject can only be used during the results phase"}}, socket}
 
       true ->
@@ -514,7 +513,7 @@ defmodule VnPartyWeb.GameChannel do
       Game.room_mode(room) != "truth_collapse" ->
         {:reply, {:error, %{reason: "Distortions are only available in Truth Collapse"}}, socket}
 
-      phase != "results" ->
+      phase not in ["results", "discussion", "transition"] ->
         {:reply, {:error, %{reason: "Fake inject can only be used during the results phase"}}, socket}
 
       true ->
@@ -926,15 +925,8 @@ defmodule VnPartyWeb.GameChannel do
     if :ets.insert_new(:round_scored, {key, true}) do
       room = Game.get_room!(room_id)
 
-      {question, effects} =
-        case :ets.lookup(:truth_round_data, {room_id, round}) do
-          [{{^room_id, ^round}, %{question: q, effects: e}}] when is_map(q) ->
-            {q, e}
-
-          _ ->
-            prepare_truth_round_question(room, round)
-        end
-
+      {question, effects} = prepare_truth_round_question(room, round)
+      purge_distortions_for_round(room_id, round)
       :ets.insert(:truth_round_data, {{room_id, round}, %{question: question, effects: effects}})
 
       :ets.insert(:truth_room_phase, {room_id, %{round: round, phase: "answering"}})
@@ -1358,9 +1350,7 @@ defmodule VnPartyWeb.GameChannel do
   @min_questions_per_category 8
   @min_truth_options 9
 
-  # Discussion distortions apply to the current round; results-screen distortions apply to the next round.
-  defp distortion_effect_round(room, "discussion"), do: room.current_round
-
+  # Results-screen picks target the upcoming round; after advance, discussion/transition target current round.
   defp distortion_effect_round(room, "results") do
     min(room.current_round + 1, room.total_rounds)
   end
@@ -1536,7 +1526,6 @@ defmodule VnPartyWeb.GameChannel do
     clear_truth_discussion_acks(room.id, round)
 
     {question, effects} = prepare_truth_round_question(room, round)
-    purge_distortions_for_round(room.id, round)
 
     set_truth_active_category(room.id, question.category)
 
@@ -2255,187 +2244,10 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   defp apply_distortions_for_round(room_id, round, question) do
-    distortions_raw =
-      :ets.lookup(:truth_distortions, room_id)
-      |> Enum.flat_map(fn
-        {^room_id, ^round, pid, action, payload} ->
-          [%{round: round, player_id: pid, action: action, payload: payload, di: get_truth_stats(pid).di}]
-
-        _ ->
-          []
-      end)
-
-    players = Game.list_players(room_id)
-    connected_players = Enum.filter(players, & &1.connected)
-    player_ids = Enum.map(connected_players, & &1.id)
-
-    ordered =
-      distortions_raw
-      |> Enum.sort_by(fn d -> {-d.di, :rand.uniform(10_000)} end)
-
-    initial_category = Map.get(question, :category)
-
-    acc_init = %{
-      q: question,
-      timeline: if(initial_category, do: [initial_category], else: []),
-      log: [],
-      remove_count: 0,
-      force_blind_entries: [],
-      remove_entries: [],
-      fake_entries: []
-    }
-
-    acc =
-      Enum.reduce(ordered, acc_init, fn d, a ->
-        case d.action do
-          "swap_category" ->
-            requested = Map.get(d.payload, "category", Map.get(d.payload, :category))
-            cat = pick_swap_category(a.q, requested)
-            new_q = generate_truth_question_from_category(room_id, round, cat, :random)
-
-            entry = %{
-              player_id: d.player_id,
-              action: d.action,
-              category: cat,
-              category_label: truth_category_label(cat)
-            }
-
-            %{a | q: new_q, timeline: a.timeline ++ [cat], log: a.log ++ [entry]}
-
-          "remove_option" ->
-            target = Map.get(d.payload, "target_player_id", Map.get(d.payload, :target_player_id))
-            entry = %{player_id: d.player_id, action: d.action, target_player_id: target}
-            %{a | remove_count: a.remove_count + 1, remove_entries: a.remove_entries ++ [entry], log: a.log ++ [entry]}
-
-          "force_blind" ->
-            target = Map.get(d.payload, "target_player_id", Map.get(d.payload, :target_player_id))
-
-            entry = %{
-              player_id: d.player_id,
-              action: d.action,
-              target_player_id: target
-            }
-
-            %{a | force_blind_entries: a.force_blind_entries ++ [entry], log: a.log ++ [entry]}
-
-          "inject_fake_option" ->
-            fake_text = Map.get(d.payload, "fake_text", Map.get(d.payload, :fake_text))
-            entry = %{player_id: d.player_id, action: d.action, fake_text: fake_text}
-            %{a | fake_entries: a.fake_entries ++ [entry], log: a.log ++ [entry]}
-
-          "merge_realities" ->
-            %{a | log: a.log ++ [%{player_id: d.player_id, action: d.action}]}
-
-          _ ->
-            %{a | log: a.log ++ [%{player_id: d.player_id, action: d.action}]}
-        end
-      end)
-
-    blind_targets =
-      if length(acc.force_blind_entries) >= 2 do
-        MapSet.new(player_ids)
-      else
-        Enum.reduce(acc.force_blind_entries, MapSet.new(), fn %{player_id: source_id, target_player_id: t}, ms ->
-          cond do
-            t == "__all_others__" ->
-              Enum.reduce(player_ids, ms, fn pid, acc_ms ->
-                if pid != source_id, do: MapSet.put(acc_ms, pid), else: acc_ms
-              end)
-
-            is_binary(t) and t != "" ->
-              MapSet.put(ms, t)
-
-            true ->
-              ms
-          end
-        end)
-      end
-
-    q1 = acc.q
-
-    incorrect =
-      Enum.filter(q1.options, fn o ->
-        !(if is_list(q1.correct), do: o.id in q1.correct, else: o.id == q1.correct)
-      end)
-
-    min_options = min(length(q1.options), max(length(connected_players) + 1, 2))
-    max_removable = max(length(incorrect) - max(0, min_options - 1), 0)
-    remove_n = min(acc.remove_count, max_removable)
-
-    removed_ids =
-      incorrect
-      |> Enum.take(remove_n)
-      |> Enum.map(& &1.id)
-      |> MapSet.new()
-
-    q2 = %{q1 | options: Enum.reject(q1.options, fn o -> MapSet.member?(removed_ids, o.id) end)}
-
-    incorrect_ids_q2 =
-      Enum.filter(q2.options, fn o ->
-        !(if is_list(q2.correct), do: o.id in q2.correct, else: o.id == q2.correct)
-      end)
-      |> Enum.map(& &1.id)
-
-    remove_targets =
-      Enum.reduce(acc.remove_entries, %{}, fn %{target_player_id: t}, m ->
-        if is_binary(t) and t != "" and t in player_ids and incorrect_ids_q2 != [] do
-          current = Map.get(m, t, MapSet.new())
-          available = Enum.reject(incorrect_ids_q2, &MapSet.member?(current, &1))
-
-          next_set =
-            case available do
-              [] ->
-                current
-
-              _ ->
-                pick = Enum.at(available, :rand.uniform(length(available)) - 1)
-                MapSet.put(current, pick)
-            end
-
-          Map.put(m, t, next_set)
-        else
-          m
-        end
-      end)
-
-    {q3, fake_entries_applied, injected_ids} =
-      Enum.reduce(acc.fake_entries, {q2, [], MapSet.new()}, fn e, {q_acc, applied, used_ids} ->
-        victim = FakeInject.pick_victim(q_acc, e.fake_text, used_ids)
-
-        case victim do
-          nil ->
-            {q_acc, applied, used_ids}
-
-          %{id: vid} ->
-            opts =
-              Enum.map(q_acc.options, fn o ->
-                if o.id == vid, do: %{o | text: e.fake_text}, else: o
-              end)
-
-            entry =
-              e
-              |> Map.put(:option_id, vid)
-              |> Map.put(:display_text, e.fake_text)
-
-            {%{q_acc | options: opts}, applied ++ [entry], MapSet.put(used_ids, vid)}
-        end
-      end)
-
-    injected_ids = MapSet.to_list(injected_ids)
-    q3 = if injected_ids == [], do: q3, else: Map.put(q3, :injected_option_ids, injected_ids)
-
-    effects = %{
-      blind_targets: blind_targets,
-      log: acc.log,
-      category_timeline: acc.timeline,
-      remove_count: acc.remove_count,
-      force_blind_count: length(acc.force_blind_entries),
-      remove_targets: Enum.into(remove_targets, %{}, fn {k, ms} -> {k, MapSet.to_list(ms)} end),
-      fake_entries: fake_entries_applied,
-      injected_option_ids: injected_ids
-    }
-
-    {q3, effects}
+    VnParty.TruthDistortionApply.apply_for_round(room_id, round, question,
+      swap_fn: &generate_truth_question_from_category/4,
+      category_picker: &pick_swap_category/2
+    )
   end
 
   defp pick_swap_category(question, requested) do
