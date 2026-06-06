@@ -41,7 +41,7 @@ defmodule VnParty.Application do
            name: VnParty.PubSub,
            adapter: Phoenix.PubSub.Redis,
            redis_opts: url,
-           node_name: node()}
+           node_name: System.get_env("RELEASE_NODE", "vn_party@render")}
 
         _ ->
           {Phoenix.PubSub, name: VnParty.PubSub}
