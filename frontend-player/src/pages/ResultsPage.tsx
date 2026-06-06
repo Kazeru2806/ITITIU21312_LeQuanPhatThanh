@@ -214,7 +214,7 @@ export function ResultsPage() {
                             <PhoThePhoenix className="w-48 h-56 md:w-64 md:h-72 drop-shadow-2xl" />
                         </div>
                         <h1 className="mb-6" style={{
-                            fontFamily: "'Bangers', cursive",
+                            fontFamily: "'Cabin', sans-serif",
                             fontSize: "clamp(3rem, 8vw, 5rem)",
                             lineHeight: "1.1",
                             color: "#9D4EDD",
@@ -258,7 +258,7 @@ export function ResultsPage() {
                                 onClick={handleRematch}
                                 className="w-full py-4 lg:py-6 rounded-xl font-black text-xl lg:text-3xl uppercase tracking-wide hover:shadow-2xl transform hover:scale-105 transition-all"
                                 style={{
-                                    fontFamily: "'Fredoka', sans-serif",
+                                    fontFamily: "'Roboto', sans-serif",
                                     background: "linear-gradient(135deg, #FF6B9D 0%, #9D4EDD 100%)",
                                     border: "3px solid #2D1B3D",
                                     color: "#FFFFFF"

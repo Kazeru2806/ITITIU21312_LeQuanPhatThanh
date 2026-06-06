@@ -31,6 +31,7 @@ defmodule VnParty.Application do
     :ets.new(:pending_answers, [:set, :public, :named_table])
     :ets.new(:distortion_usage, [:set, :public, :named_table])
     :ets.new(:truth_discussion_ack, [:set, :public, :named_table])
+    :ets.new(:truth_inject_preview, [:set, :public, :named_table])
 
     pubsub_child =
       case System.get_env("REDIS_URL") do

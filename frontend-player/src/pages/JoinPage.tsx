@@ -85,7 +85,7 @@ export function JoinPage() {
         {/* Logo/Title Area */}
         <div className="text-center mb-8 animate-in fade-in slide-in-from-top duration-700">
           <h1 className="mb-2" style={{ 
-            fontFamily: "'Bangers', cursive",
+            fontFamily: "'Cabin', sans-serif",
             fontSize: "clamp(2.5rem, 8vw, 5rem)",
             lineHeight: "1.1",
             color: "#9D4EDD",
@@ -95,7 +95,7 @@ export function JoinPage() {
             VN PARTY
           </h1>
           <div className="mb-4" style={{
-            fontFamily: "'Bangers', cursive",
+            fontFamily: "'Cabin', sans-serif",
             fontSize: "clamp(1.8rem, 6vw, 3.5rem)",
             color: "#FF9E3D",
             textShadow: "3px 3px 0px #FF6B9D",
@@ -115,7 +115,7 @@ export function JoinPage() {
           <div className="inline-block bg-gradient-to-r from-pink-500 via-purple-500 to-orange-500 p-1 rounded-3xl shadow-lg">
             <div className="bg-white px-8 py-3 rounded-3xl">
               <p style={{
-                fontFamily: "'Bangers', cursive",
+                fontFamily: "'Cabin', sans-serif",
                 fontSize: "clamp(1.2rem, 4vw, 2rem)",
                 color: "#9D4EDD",
                 letterSpacing: "0.05em"
@@ -139,7 +139,7 @@ export function JoinPage() {
             {/* Name Input */}
             <div className="space-y-3">
               <label className="block" style={{
-                fontFamily: "'Fredoka', sans-serif",
+                fontFamily: "'Roboto', sans-serif",
                 fontSize: "1.1rem",
                 color: "#2D1B3D"
               }}>
@@ -155,7 +155,7 @@ export function JoinPage() {
                   className="w-full py-6 px-4 rounded-xl border-3 border-purple-300 focus:border-pink-500 transition-colors"
                   style={{
                     fontSize: "1.5rem",
-                    fontFamily: "'Fredoka', sans-serif",
+                    fontFamily: "'Roboto', sans-serif",
                     background: "#FFF0F5"
                   }}
                 />
@@ -168,7 +168,7 @@ export function JoinPage() {
             {/* Join Room */}
             <div className="space-y-3">
               <label className="block" style={{
-                fontFamily: "'Fredoka', sans-serif",
+                fontFamily: "'Roboto', sans-serif",
                 fontSize: "1.1rem",
                 color: "#2D1B3D"
               }}>
@@ -182,7 +182,7 @@ export function JoinPage() {
                 className="w-full py-6 px-4 rounded-xl border-3 border-purple-300 focus:border-pink-500 transition-colors"
                 style={{
                   fontSize: "1.5rem",
-                  fontFamily: "'Fredoka', sans-serif",
+                  fontFamily: "'Roboto', sans-serif",
                   textAlign: "center",
                   letterSpacing: "0.3em",
                   textTransform: "uppercase"
@@ -195,7 +195,7 @@ export function JoinPage() {
                 className="w-full py-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                 style={{
                   fontSize: "1.5rem",
-                  fontFamily: "'Fredoka', sans-serif",
+                  fontFamily: "'Roboto', sans-serif",
                   background: (roomCode.length === 6 && nickname.trim()) 
                     ? "linear-gradient(135deg, #FF9E3D 0%, #FF6B9D 100%)" 
                     : "#E5E5E5",
@@ -212,7 +212,7 @@ export function JoinPage() {
         {/* Footer Message */}
         <div className="mt-8 text-center animate-in fade-in duration-700" style={{ animationDelay: "0.6s" }}>
           <p style={{
-            fontFamily: "'Fredoka', sans-serif",
+            fontFamily: "'Roboto', sans-serif",
             fontSize: "1rem",
             color: "#7D5A8A",
             maxWidth: "500px"

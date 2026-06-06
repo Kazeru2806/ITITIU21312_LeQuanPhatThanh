@@ -301,7 +301,7 @@ export function LobbyPage() {
                             <PhoThePhoenix className="w-32 h-40 drop-shadow-2xl" />
                         </div>
                         <h1 className="mb-4" style={{ 
-                            fontFamily: "'Bangers', cursive",
+                            fontFamily: "'Cabin', sans-serif",
                             fontSize: "clamp(2.5rem, 8vw, 4rem)",
                             lineHeight: "1.1",
                             color: "#9D4EDD",
@@ -367,7 +367,7 @@ export function LobbyPage() {
                     {/* Players List */}
                     <div className="mb-8">
                         <h2 className="text-2xl font-black mb-6 text-center" style={{
-                            fontFamily: "'Bangers', cursive",
+                            fontFamily: "'Cabin', sans-serif",
                             color: "#FF9E3D",
                             textShadow: "3px 3px 0px #FF6B9D"
                         }}>
@@ -425,7 +425,7 @@ export function LobbyPage() {
                             className="w-full py-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                             style={{
                                 fontSize: "1.5rem",
-                                fontFamily: "'Fredoka', sans-serif",
+                                fontFamily: "'Roboto', sans-serif",
                                 background: (players.length >= 2 && connected)
                                     ? "linear-gradient(135deg, #FF6B9D 0%, #9D4EDD 100%)"
                                     : "#E5E5E5",

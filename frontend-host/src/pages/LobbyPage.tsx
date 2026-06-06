@@ -178,7 +178,7 @@ export function LobbyPage() {
           <h2
             className="text-2xl font-black mb-4 text-center"
             style={{
-              fontFamily: "'Bangers', cursive",
+              fontFamily: "'Cabin', sans-serif",
               color: '#FF9E3D',
               textShadow: '2px 2px 0px #FF6B9D',
             }}

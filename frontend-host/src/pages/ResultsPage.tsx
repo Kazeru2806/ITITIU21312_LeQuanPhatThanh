@@ -112,7 +112,7 @@ export function ResultsPage() {
 
           <h2
             className="text-3xl font-black text-center mb-6"
-            style={{ fontFamily: "'Bangers', cursive", color: '#FF9E3D' }}
+            style={{ fontFamily: "'Cabin', sans-serif", color: '#FF9E3D' }}
           >
             Bảng Xếp Hạng Cuối
           </h2>

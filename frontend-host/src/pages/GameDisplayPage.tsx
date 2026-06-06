@@ -682,7 +682,7 @@ export function GameDisplayPage() {
                     {(currentQuestion as any).category_label}
                   </p>
                 )}
-                <h2 className="text-5xl lg:text-6xl font-black mb-6 text-purple-600" style={{ fontFamily: "'Bangers', cursive" }}>
+                <h2 className="text-5xl lg:text-6xl font-black mb-6 text-purple-600" style={{ fontFamily: "'Cabin', sans-serif" }}>
                   {currentQuestion.text}
                 </h2>
               </div>
@@ -835,7 +835,7 @@ export function GameDisplayPage() {
 
                 {/* Question Text */}
                 <div className="text-center mb-12">
-                  <h2 className="text-5xl lg:text-6xl font-black mb-6 text-purple-600" style={{ fontFamily: "'Bangers', cursive" }}>
+                  <h2 className="text-5xl lg:text-6xl font-black mb-6 text-purple-600" style={{ fontFamily: "'Cabin', sans-serif" }}>
                     {currentQuestion.text}
                   </h2>
                 </div>

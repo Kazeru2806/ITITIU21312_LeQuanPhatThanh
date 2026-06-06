@@ -73,7 +73,7 @@ export function HostTitle({ children }: { children: ReactNode }) {
     <h1
       className="mb-2 text-center"
       style={{
-        fontFamily: "'Bangers', cursive",
+        fontFamily: "'Cabin', sans-serif",
         fontSize: 'clamp(2.5rem, 8vw, 4.5rem)',
         lineHeight: 1.1,
         color: '#9D4EDD',
@@ -91,7 +91,7 @@ export function HostSubtitle({ children }: { children: ReactNode }) {
     <p
       className="text-center mb-6"
       style={{
-        fontFamily: "'Fredoka', sans-serif",
+        fontFamily: "'Roboto', sans-serif",
         fontSize: '1.1rem',
         color: '#7D5A8A',
       }}

@@ -780,7 +780,7 @@ export function GamePage() {
     if (!storeHydrated) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50">
-                <p className="text-purple-700 font-bold text-lg">Restoring session…</p>
+                <p className="text-purple-700 font-bold text-lg">Đang khôi phục phiên…</p>
             </div>
         );
     }
@@ -788,13 +788,13 @@ export function GamePage() {
     if (!playerId || !roomCode) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6">
-                <p className="text-purple-800 font-bold text-lg mb-4">Session lost — rejoin from the home screen.</p>
+                <p className="text-purple-800 font-bold text-lg mb-4">Phiên đã hết — vui lòng tham gia lại từ màn hình chính.</p>
                 <button
                     type="button"
                     onClick={() => navigate('/')}
                     className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold"
                 >
-                    Go home
+                    Về trang chủ
                 </button>
             </div>
         );
@@ -803,14 +803,14 @@ export function GamePage() {
     if (socketError && !connected) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6">
-                <p className="text-red-700 font-bold text-lg mb-2">Could not connect to the game</p>
+                <p className="text-red-700 font-bold text-lg mb-2">Không thể kết nối với trò chơi</p>
                 <p className="text-gray-600 mb-4 text-center max-w-md">{socketError}</p>
                 <button
                     type="button"
                     onClick={() => navigate('/lobby')}
                     className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold"
                 >
-                    Back to lobby
+                    Quay lại phòng chờ
                 </button>
             </div>
         );
@@ -825,7 +825,7 @@ export function GamePage() {
                 <PhoThePhoenix className="w-28 h-32 drop-shadow-lg mb-4" />
                 <h2
                     className="text-3xl font-black text-center mb-2"
-                    style={{ fontFamily: "'Bangers', cursive", color: '#9D4EDD' }}
+                    style={{ fontFamily: "'Cabin', sans-serif", color: '#9D4EDD' }}
                 >
                     Next round
                 </h2>
@@ -842,16 +842,16 @@ export function GamePage() {
                 <PhoThePhoenix className="w-28 h-32 drop-shadow-lg mb-4" />
                 <h2
                     className="text-3xl font-black text-center mb-2 text-purple-700"
-                    style={{ fontFamily: "'Bangers', cursive" }}
+                    style={{ fontFamily: "'Cabin', sans-serif" }}
                 >
-                    Get ready to answer
+                    Chuẩn bị trả lời
                 </h2>
                 <p className="text-center text-gray-600 font-semibold max-w-md">
-                    Syncing the question from the room…
+                    Đang đồng bộ câu hỏi từ phòng…
                 </p>
                 {!connected && (
                     <p className="text-center text-amber-700 text-sm mt-4 font-semibold">
-                        Reconnecting to the game server…
+                        Đang kết nối lại với máy chủ…
                     </p>
                 )}
             </div>
@@ -914,7 +914,7 @@ export function GamePage() {
                         </div>
                         <h2
                             className="text-3xl font-black text-center mb-2"
-                            style={{ fontFamily: "'Bangers', cursive", color: '#9D4EDD' }}
+                            style={{ fontFamily: "'Cabin', sans-serif", color: '#9D4EDD' }}
                         >
                             Discussion phase
                         </h2>
@@ -922,26 +922,26 @@ export function GamePage() {
                             Time left: <span className="text-pink-600 font-black">{discussionLeft}s</span>
                         </p>
                         <p className="text-center text-gray-600 text-sm mb-6">
-                            Watch the host screen for the full question. Lock in a prediction below.
+                            Xem câu hỏi đầy đủ trên màn hình chính. Khóa dự đoán bên dưới.
                         </p>
                         <div className="mb-6 p-4 rounded-xl border-2 border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50 min-h-[120px]">
-                            <p className="text-xs font-black text-purple-600 uppercase tracking-widest">Theme</p>
+                            <p className="text-xs font-black text-purple-600 uppercase tracking-widest">Chủ đề</p>
                             <p className="text-2xl font-black text-pink-700">
                                 {discussionMeta?.categoryLabel ?? 'Đang tải chủ đề…'}
                             </p>
                             {discussionMeta?.timelineLabels && discussionMeta.timelineLabels.length > 1 ? (
                                 <p className="text-sm text-gray-700 mt-2">
-                                    <span className="font-bold text-purple-700">After swaps: </span>
+                                    <span className="font-bold text-purple-700">Sau khi đổi: </span>
                                     {discussionMeta.timelineLabels.join(' → ')}
                                 </p>
                             ) : (
                                 <p className="text-sm text-gray-600 mt-2">
-                                    The category stays put each round until someone uses Swap Category.
+                                    Thể loại giữ nguyên mỗi vòng cho đến khi có người dùng Đổi Thể Loại.
                                 </p>
                             )}
                         </div>
                         <p className="text-center font-bold text-purple-800 mb-3">
-                            Which option will be picked the most?
+                            Đáp án nào sẽ được chọn nhiều nhất?
                         </p>
                         <div
                             className={`grid gap-3 ${
@@ -1039,14 +1039,14 @@ export function GamePage() {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6">
                 <PhoThePhoenix className="w-24 h-28 mb-4" />
-                <p className="text-purple-800 font-bold text-lg mb-2">Syncing with the room…</p>
-                <p className="text-gray-600 text-sm">If this lasts more than a few seconds, return to the lobby.</p>
+                <p className="text-purple-800 font-bold text-lg mb-2">Đang đồng bộ với phòng…</p>
+                <p className="text-gray-600 text-sm">Nếu chờ quá lâu, hãy quay lại phòng chờ.</p>
                 <button
                     type="button"
                     onClick={() => navigate('/lobby')}
                     className="mt-4 px-6 py-3 rounded-xl bg-purple-600 text-white font-bold"
                 >
-                    Back to lobby
+                    Quay lại phòng chờ
                 </button>
             </div>
         );
@@ -1168,13 +1168,13 @@ export function GamePage() {
                         </div>
                         <h2
                             className="text-3xl lg:text-4xl font-black mb-2 text-purple-700"
-                            style={{ fontFamily: "'Bangers', cursive" }}
+                            style={{ fontFamily: "'Cabin', sans-serif" }}
                         >
-                            Preparing question…
+                            Đang chuẩn bị câu hỏi…
                         </h2>
-                        <p className="text-xl lg:text-2xl font-semibold text-gray-600">Pho is thinking…</p>
+                        <p className="text-xl lg:text-2xl font-semibold text-gray-600">Phở đang suy nghĩ…</p>
                         {!connected && (
-                            <p className="text-amber-700 text-sm mt-4 font-semibold">Reconnecting to the game server…</p>
+                            <p className="text-amber-700 text-sm mt-4 font-semibold">Đang kết nối lại với máy chủ…</p>
                         )}
                     </div>
                 ) : (
@@ -1197,7 +1197,7 @@ export function GamePage() {
                                         <PhoThePhoenix className="w-24 h-28 drop-shadow-lg" />
                                     </div>
                                     <h2 className="text-3xl lg:text-4xl font-black mb-2 lg:mb-4" style={{
-                                        fontFamily: "'Bangers', cursive",
+                                        fontFamily: "'Cabin', sans-serif",
                                         color: "#9D4EDD",
                                         textShadow: "3px 3px 0px #FF6B9D"
                                     }}>
@@ -1233,8 +1233,8 @@ export function GamePage() {
                                         >
                                             {isShuffledView ? (
                                                 <div className="flex flex-col items-center">
-                                                    <span className="font-black">Shuffled choice {index + 1}</span>
-                                                    <span className="text-xs opacity-80">This answer has been shuffled</span>
+                                                    <span className="font-black">Lựa chọn xáo trộn {index + 1}</span>
+                                                    <span className="text-xs opacity-80">Đáp án này đã bị xáo trộn</span>
                                                 </div>
                                             ) : (
                                                 optionId
@@ -1251,7 +1251,7 @@ export function GamePage() {
                                     disabled={!selectedAnswer}
                                     className="w-full mt-6 lg:mt-8 py-5 lg:py-7 rounded-xl font-black text-xl lg:text-3xl uppercase tracking-wide hover:shadow-2xl transform hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                                     style={{
-                                        fontFamily: "'Fredoka', sans-serif",
+                                        fontFamily: "'Roboto', sans-serif",
                                         background: selectedAnswer ? "linear-gradient(135deg, #FF6B9D 0%, #9D4EDD 100%)" : "#E5E5E5",
                                         border: "3px solid #2D1B3D",
                                         color: selectedAnswer ? "#FFFFFF" : "#999999"

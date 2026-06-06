@@ -416,9 +416,16 @@ defmodule VnPartyWeb.GameChannel do
             :ets.insert(:truth_fake_locks, {lock_key, true})
 
             next_round = room.current_round + 1
-            base_q = generate_question_for_mode(room, next_round)
+
+            # Peek at the next question WITHOUT advancing history, so the actual
+            # round start picks the same question the player sees in the preview.
+            base_q = peek_next_truth_question(room, next_round)
             base_q = ensure_truth_question_option_capacity(base_q, count_connected(room.id) + 1)
             next_q = resize_truth_options_for_players(base_q, count_connected(room.id))
+
+            # Cache so the actual round start reuses this exact question.
+            :ets.insert(:truth_inject_preview, {{room.id, next_round}, base_q})
+
             preview =
               %{
                 round: next_round,
@@ -936,6 +943,12 @@ defmodule VnPartyWeb.GameChannel do
             IO.puts("⚠️ truth_begin_answering: no stored question for round #{round}, generating fresh")
             prepare_truth_round_question(room, round)
         end
+
+      # Distortions may swap the category (producing a new 9-option question) or inject
+      # fake options. Always resize to the connected player count after applying distortions.
+      conn = count_connected(room_id)
+      question = ensure_truth_question_option_capacity(question, conn + 1)
+      question = resize_truth_options_for_players(question, conn)
 
       IO.puts("🎯 truth_begin_answering: remove_targets=#{inspect(effects.remove_targets)}, blind_targets=#{inspect(effects.blind_targets)}")
 
@@ -1915,6 +1928,7 @@ defmodule VnPartyWeb.GameChannel do
     :ets.match_delete(:truth_discussion_ack, {{room_id, :_, :_}, :_})
     :ets.match_delete(:truth_question_history, {{room_id, :_}, :_})
     :ets.match_delete(:truth_fake_locks, {{room_id, :_, :_}, :_})
+    :ets.match_delete(:truth_inject_preview, {{room_id, :_}, :_})
 
     :ets.delete(:truth_distortions, room_id)
     :ets.delete(:truth_room_phase, room_id)
@@ -2009,7 +2023,6 @@ defmodule VnPartyWeb.GameChannel do
   defp resize_truth_options_for_players(q, connected_n) when connected_n < 0, do: q
 
   defp resize_truth_options_for_players(%{options: []} = q, _), do: q
-  defp resize_truth_options_for_players(%{injected_option_ids: ids} = q, _) when is_list(ids) and ids != [], do: q
 
   defp resize_truth_options_for_players(%{options: options} = q, connected_n) do
     # Target: one option per connected player + 1, floor at @min_truth_options, cap at available
@@ -2017,11 +2030,25 @@ defmodule VnPartyWeb.GameChannel do
     want = max(want, @min_truth_options)
     want = min(want, length(options))
     correct_ids = if is_list(q.correct), do: q.correct, else: [q.correct]
-    kept_correct = Enum.filter(options, fn o -> o.id in correct_ids end)
-    wrongs = Enum.reject(options, fn o -> o.id in correct_ids end)
-    need_wrong = max(0, want - length(kept_correct))
+
+    # Injected (fake) options are protected — always kept alongside the correct answer
+    injected_ids =
+      case Map.get(q, :injected_option_ids) do
+        ids when is_list(ids) -> ids
+        _ -> []
+      end
+
+    protected_ids = MapSet.new(correct_ids ++ injected_ids)
+    protected = Enum.filter(options, fn o -> MapSet.member?(protected_ids, o.id) end)
+    wrongs = Enum.reject(options, fn o -> MapSet.member?(protected_ids, o.id) end)
+
+    # Increase want to accommodate injected options so we don't squeeze out regular wrongs
+    want = max(want, length(protected) + 1)
+    want = min(want, length(options))
+
+    need_wrong = max(0, want - length(protected))
     keep_ids =
-      (Enum.map(kept_correct, & &1.id) ++ Enum.map(Enum.take(wrongs, need_wrong), & &1.id))
+      (Enum.map(protected, & &1.id) ++ Enum.map(Enum.take(wrongs, need_wrong), & &1.id))
       |> MapSet.new()
 
     ordered = Enum.filter(options, fn o -> MapSet.member?(keep_ids, o.id) end)
@@ -2657,28 +2684,77 @@ defmodule VnPartyWeb.GameChannel do
     generate_truth_question(room, round, nil)
   end
 
-  # forced_category: internal use (e.g. tests); otherwise use persisted room category from ETS
-  defp generate_truth_question(room, round, forced_category) do
+  # Peek at the next question WITHOUT writing to history.
+  # Used by inject_fake_option to show a preview that matches the actual round.
+  defp peek_next_truth_question(room, round) do
     pools = truth_question_pools()
     room_id = room.id
 
     category =
-      cond do
-        is_binary(forced_category) and forced_category != "" and Map.has_key?(pools, forced_category) ->
-          forced_category
-
-        true ->
-          case get_truth_active_category(room_id) do
-            nil ->
-              init_truth_active_category(room_id)
-              get_truth_active_category(room_id)
-
-            cat ->
-              cat
-          end
+      case get_truth_active_category(room_id) do
+        nil ->
+          init_truth_active_category(room_id)
+          get_truth_active_category(room_id)
+        cat -> cat
       end
 
-    generate_truth_question_from_category(room_id, round, category, :sequential)
+    cat = if Map.has_key?(pools, category), do: category, else: hd(Map.keys(pools) |> Enum.sort())
+    questions = Map.fetch!(pools, cat)
+
+    # Read history but don't write — identical logic to pick_truth_question(:sequential)
+    history_key = {room_id, cat}
+    used_ids =
+      case :ets.lookup(:truth_question_history, history_key) do
+        [{^history_key, ids}] when is_list(ids) -> ids
+        _ -> []
+      end
+
+    used_set = MapSet.new(used_ids)
+    available = Enum.reject(questions, fn q -> MapSet.member?(used_set, q.id) end)
+    available = if available == [], do: questions, else: available
+    selected = Enum.at(available, rem(round - 1, length(available)))
+
+    selected
+    |> ensure_question_min_options(cat)
+    |> Map.put(:category, cat)
+    |> Map.put(:time_limit, 120)
+  end
+
+  # forced_category: internal use (e.g. tests); otherwise use persisted room category from ETS
+  defp generate_truth_question(room, round, forced_category) do
+    room_id = room.id
+
+    # If inject_fake cached a preview for this round, consume and use it so the
+    # player sees the exact same question they were shown during the preview.
+    case :ets.lookup(:truth_inject_preview, {room_id, round}) do
+      [{{^room_id, ^round}, cached_q}] ->
+        :ets.delete(:truth_inject_preview, {room_id, round})
+        # Mark the question as used in history so it isn't repeated later.
+        cat = Map.get(cached_q, :category, "general")
+        mark_question_used(room_id, cat, cached_q.id)
+        cached_q
+
+      _ ->
+        pools = truth_question_pools()
+
+        category =
+          cond do
+            is_binary(forced_category) and forced_category != "" and Map.has_key?(pools, forced_category) ->
+              forced_category
+
+            true ->
+              case get_truth_active_category(room_id) do
+                nil ->
+                  init_truth_active_category(room_id)
+                  get_truth_active_category(room_id)
+
+                cat ->
+                  cat
+              end
+          end
+
+        generate_truth_question_from_category(room_id, round, category, :sequential)
+    end
   end
 
   defp generate_truth_question_from_category(room_id, round, category, pick_mode) do
@@ -2733,6 +2809,23 @@ defmodule VnPartyWeb.GameChannel do
     ensure_question_min_options(selected, category)
   end
 
+  # Mark a question as used in history without picking a new one.
+  # Called when consuming a cached inject_fake preview.
+  defp mark_question_used(room_id, category, question_id) do
+    history_key = {room_id, category}
+    pools = truth_question_pools()
+    pool_size = pools |> Map.get(category, []) |> length() |> max(1)
+
+    used_ids =
+      case :ets.lookup(:truth_question_history, history_key) do
+        [{^history_key, ids}] when is_list(ids) -> ids
+        _ -> []
+      end
+
+    next_used = Enum.take((used_ids ++ [question_id]) |> Enum.uniq(), pool_size)
+    :ets.insert(:truth_question_history, {history_key, next_used})
+  end
+
   defp ensure_question_min_options(q, category) do
     cat = category || Map.get(q, :category) || "general"
     opts = Map.get(q, :options, [])
@@ -2779,8 +2872,8 @@ defmodule VnPartyWeb.GameChannel do
             |> Enum.take(3)
 
           Enum.map(1..count, fn i ->
-            hint = Enum.at(words, rem(i, max(length(words), 1))) || "related"
-            "Unlikely: #{hint} (variant #{i})"
+            hint = Enum.at(words, rem(i, max(length(words), 1))) || "liên quan"
+            "Không chắc: #{hint} (biến thể #{i})"
           end)
 
         _ ->
@@ -2791,13 +2884,13 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   defp category_base_distractors("general"),
-    do: ["None of the above", "All of the above", "Not applicable", "Unknown", "Depends on context", "Cannot be determined", "Only in theory", "Only in practice", "Both A and C"]
+    do: ["Không có đáp án nào", "Tất cả đáp án trên", "Không áp dụng", "Không rõ", "Tùy ngữ cảnh", "Không thể xác định", "Chỉ trên lý thuyết", "Chỉ trong thực tế", "Cả A và C"]
 
   defp category_base_distractors("science_lite"),
-    do: ["Helium", "Neon", "Argon", "Krypton", "Xenon", "Radon", "Plasma", "Vacuum", "Absolute zero"]
+    do: ["Heli", "Neon", "Argon", "Krypton", "Xenon", "Radon", "Plasma", "Chân không", "Độ không tuyệt đối"]
 
   defp category_base_distractors("geography"),
-    do: ["Andes", "Himalayas", "Sahara", "Gobi", "Arctic Ocean", "Mediterranean", "Equator", "Prime meridian", "Tropic of Cancer"]
+    do: ["Dãy Andes", "Dãy Himalaya", "Sa mạc Sahara", "Sa mạc Gobi", "Bắc Băng Dương", "Địa Trung Hải", "Đường xích đạo", "Kinh tuyến gốc", "Chí tuyến Bắc"]
 
   defp category_base_distractors("history"),
     do: ["1914", "1918", "1939", "1941", "1969", "1776", "1066", "1492", "2001"]
@@ -2806,19 +2899,19 @@ defmodule VnPartyWeb.GameChannel do
     do: ["FTP", "SMTP", "DNS", "TCP", "UDP", "HTML", "CSS", "JSON", "XML"]
 
   defp category_base_distractors("food_culture"),
-    do: ["Sushi", "Tacos", "Curry", "Baguette", "Pizza", "Ramen", "Tapas", "BBQ", "Salad"]
+    do: ["Sushi", "Taco", "Cà ri", "Bánh mì Pháp", "Pizza", "Ramen", "Tapas", "Nướng BBQ", "Salad"]
 
   defp category_base_distractors("sports_lite"),
-    do: ["Cricket", "Rugby", "Golf", "Boxing", "Swimming", "Cycling", "Skiing", "Volleyball", "Handball"]
+    do: ["Cricket", "Bóng bầu dục", "Golf", "Quyền Anh", "Bơi lội", "Đua xe đạp", "Trượt tuyết", "Bóng chuyền", "Bóng ném"]
 
   defp category_base_distractors("pop_culture"),
-    do: ["Marvel", "DC", "Anime", "K-pop", "Broadway", "Netflix", "Podcast", "Meme", "Viral trend"]
+    do: ["Marvel", "DC", "Anime", "K-pop", "Nhạc kịch Broadway", "Netflix", "Podcast", "Meme", "Xu hướng viral"]
 
   defp category_base_distractors("social_stats"),
-    do: ["Mean", "Median", "Mode", "Sample bias", "Control group", "Correlation", "Causation", "Outlier", "Confidence interval"]
+    do: ["Trung bình cộng", "Trung vị", "Yếu vị", "Sai lệch mẫu", "Nhóm đối chứng", "Tương quan", "Nhân quả", "Giá trị ngoại lai", "Khoảng tin cậy"]
 
   defp category_base_distractors("weird_facts"),
-    do: ["Myth", "Urban legend", "Old wives' tale", "Hoax", "Superstition", "Folk belief", "Rumor", "Clickbait", "Debunked"]
+    do: ["Huyền thoại", "Tin đồn đô thị", "Mẹo dân gian", "Trò lừa", "Mê tín", "Niềm tin dân gian", "Tin đồn", "Câu view", "Đã bị bác bỏ"]
 
   defp category_base_distractors(_),
     do: category_base_distractors("general")
@@ -2901,9 +2994,13 @@ defmodule VnPartyWeb.GameChannel do
         {"Động vật nào có thể tái tạo chi bị mất?",
          ["Sao biển", "Kỳ nhông", "Giun dẹp", "Cua", "Đuôi thằn lằn", "Hải sâm", "Bọt biển", "Thủy tức", "Axolotl"]}
 
+      "general" ->
+        {"Đâu là một nguyên tố hóa học?",
+         ["Oxy", "Hydro", "Nitơ", "Carbon", "Heli", "Neon", "Sắt", "Đồng", "Bạc"]}
+
       _ ->
-        {"Đáp án nào đúng nhất?",
-         ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D", "Đáp án E", "Đáp án F", "Đáp án G", "Đáp án H", "Đáp án I"]}
+        {"Đâu là đơn vị đo lường?",
+         ["Kilogram", "Mét", "Giây", "Ampe", "Kelvin", "Mole", "Candela", "Lít", "Hecta"]}
     end
   end
 

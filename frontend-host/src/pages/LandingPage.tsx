@@ -43,7 +43,7 @@ export function LandingPage() {
         <p
           className="text-center mb-6"
           style={{
-            fontFamily: "'Bangers', cursive",
+            fontFamily: "'Cabin', sans-serif",
             fontSize: 'clamp(1.5rem, 5vw, 2.5rem)',
             color: '#FF9E3D',
             textShadow: '3px 3px 0px #FF6B9D',
@@ -105,7 +105,7 @@ export function LandingPage() {
             disabled={loading}
             className="w-full py-7 rounded-2xl text-xl font-bold text-white border-[3px] border-[#2D1B3D] shadow-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
             style={{
-              fontFamily: "'Fredoka', sans-serif",
+              fontFamily: "'Roboto', sans-serif",
               background: loading
                 ? '#E5E5E5'
                 : 'linear-gradient(135deg, #FF6B9D 0%, #9D4EDD 100%)',

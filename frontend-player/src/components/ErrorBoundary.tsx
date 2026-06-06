@@ -23,17 +23,17 @@ export class ErrorBoundary extends Component<Props, State> {
         if (this.state.error) {
             return (
                 <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6 gap-4 text-center">
-                    <h1 className="text-2xl font-black text-purple-800">Something went wrong</h1>
+                    <h1 className="text-2xl font-black text-purple-800">Đã xảy ra lỗi</h1>
                     <p className="text-gray-700 max-w-md font-semibold">{this.state.error.message}</p>
                     <p className="text-sm text-gray-500 max-w-md">
-                        Try a hard refresh. If this persists, the player app may need a new deploy on Vercel.
+                        Hãy tải lại trang. Nếu lỗi vẫn tiếp tục, ứng dụng có thể cần được cập nhật.
                     </p>
                     <button
                         type="button"
                         onClick={() => window.location.assign('/')}
                         className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold"
                     >
-                        Back to join screen
+                        Quay lại màn hình tham gia
                     </button>
                 </div>
             );
