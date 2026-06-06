@@ -14,7 +14,7 @@ defmodule VnParty.Repo.Migrations.CreateBlockchainAnchors do
       add :status, :string, null: false, default: "pending"
       add :error, :text
 
-      timestamps(type: :utc_datetime, updated_at: true)
+      timestamps(type: :utc_datetime)
     end
 
     create index(:blockchain_anchors, [:room_id, :seq])
@@ -22,4 +22,3 @@ defmodule VnParty.Repo.Migrations.CreateBlockchainAnchors do
     create unique_index(:blockchain_anchors, [:event_id])
   end
 end
-
