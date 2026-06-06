@@ -916,10 +916,10 @@ export function GamePage() {
                             className="text-3xl font-black text-center mb-2"
                             style={{ fontFamily: "'Cabin', sans-serif", color: '#9D4EDD' }}
                         >
-                            Discussion phase
+                            Giai đoạn thảo luận
                         </h2>
                         <p className="text-center text-gray-600 font-semibold mb-2">
-                            Time left: <span className="text-pink-600 font-black">{discussionLeft}s</span>
+                            Thời gian còn: <span className="text-pink-600 font-black">{discussionLeft}s</span>
                         </p>
                         <p className="text-center text-gray-600 text-sm mb-6">
                             Xem câu hỏi đầy đủ trên màn hình chính. Khóa dự đoán bên dưới.
