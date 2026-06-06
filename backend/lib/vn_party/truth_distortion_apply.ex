@@ -216,18 +216,17 @@ defmodule VnParty.TruthDistortionApply do
     end
   end
 
-  defp truth_category_label("general"), do: "General"
-  defp truth_category_label("weird_facts"), do: "Weird Facts"
-  defp truth_category_label("social_stats"), do: "Social & Stats"
-  defp truth_category_label("science_lite"), do: "Science (Lite)"
-  defp truth_category_label("pop_culture"), do: "Pop Culture"
-  defp truth_category_label("history"), do: "History"
-  defp truth_category_label("geography"), do: "Geography"
-  defp truth_category_label("food_culture"), do: "Food & Culture"
-  defp truth_category_label("sports_lite"), do: "Sports (Lite)"
-  defp truth_category_label("technology"), do: "Technology"
+  defp truth_category_label("general"), do: "Kiến Thức Chung"
+  defp truth_category_label("weird_facts"), do: "Sự Thật Kỳ Lạ"
+  defp truth_category_label("social_stats"), do: "Xã Hội & Thống Kê"
+  defp truth_category_label("science_lite"), do: "Khoa Học Vui"
+  defp truth_category_label("pop_culture"), do: "Văn Hóa Đại Chúng"
+  defp truth_category_label("history"), do: "Lịch Sử"
+  defp truth_category_label("geography"), do: "Địa Lý"
+  defp truth_category_label("food_culture"), do: "Ẩm Thực & Văn Hóa"
+  defp truth_category_label("sports_lite"), do: "Thể Thao Vui"
+  defp truth_category_label("technology"), do: "Công Nghệ"
   defp truth_category_label(other) when is_binary(other),
-    do: other |> String.replace("_", " ") |> String.capitalize()
-
-  defp truth_category_label(_), do: "Unknown"
+    do: String.replace(other, "_", " ") |> String.capitalize()
+  defp truth_category_label(_), do: "Không Rõ"
 end

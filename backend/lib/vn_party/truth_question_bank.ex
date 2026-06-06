@@ -29,18 +29,18 @@ defmodule VnParty.TruthQuestionBank do
 
   defp general do
     [
-      q("tg1", "Which country consumes the most coffee per capita?", 0, [
-        "Finland",
-        "USA",
+      q("tg1", "Quốc gia nào tiêu thụ cà phê bình quân đầu người nhiều nhất?", 0, [
+        "Phần Lan",
+        "Mỹ",
         "Brazil",
-        "Japan",
-        "Sweden",
-        "Norway",
+        "Nhật Bản",
+        "Thụy Điển",
+        "Na Uy",
         "Colombia",
         "Ethiopia",
-        "Vietnam"
+        "Việt Nam"
       ]),
-      q("tg2", "How many hearts does an octopus have?", 2, [
+      q("tg2", "Bạch tuộc có bao nhiêu trái tim?", 2, [
         "1",
         "2",
         "3",
@@ -51,7 +51,7 @@ defmodule VnParty.TruthQuestionBank do
         "8",
         "10"
       ]),
-      q("tg3", "What is the smallest prime number?", 2, [
+      q("tg3", "Số nguyên tố nhỏ nhất là gì?", 2, [
         "0",
         "1",
         "2",
@@ -62,18 +62,18 @@ defmodule VnParty.TruthQuestionBank do
         "9",
         "11"
       ]),
-      q("tg4", "Which planet is known as the Red Planet?", 1, [
-        "Venus",
-        "Mars",
-        "Jupiter",
-        "Saturn",
-        "Mercury",
-        "Neptune",
-        "Uranus",
-        "Pluto",
-        "Earth"
+      q("tg4", "Hành tinh nào được gọi là Hành tinh Đỏ?", 1, [
+        "Sao Kim",
+        "Sao Hỏa",
+        "Sao Mộc",
+        "Sao Thổ",
+        "Sao Thủy",
+        "Sao Hải Vương",
+        "Sao Thiên Vương",
+        "Sao Diêm Vương",
+        "Trái Đất"
       ]),
-      q("tg5", "How many continents are there on Earth (standard model)?", 2, [
+      q("tg5", "Trái Đất có bao nhiêu châu lục (theo mô hình tiêu chuẩn)?", 2, [
         "5",
         "6",
         "7",
@@ -84,18 +84,18 @@ defmodule VnParty.TruthQuestionBank do
         "10",
         "12"
       ]),
-      q("tg6", "Which gas makes up most of Earth's atmosphere?", 1, [
-        "Oxygen",
-        "Nitrogen",
+      q("tg6", "Khí nào chiếm phần lớn bầu khí quyển Trái Đất?", 1, [
+        "Oxy",
+        "Nitơ",
         "Carbon Dioxide",
         "Argon",
-        "Helium",
-        "Hydrogen",
-        "Methane",
+        "Heli",
+        "Hydro",
+        "Metan",
         "Neon",
-        "Water vapor"
+        "Hơi nước"
       ]),
-      q("tg7", "What is the chemical symbol for gold?", 2, [
+      q("tg7", "Ký hiệu hóa học của vàng là gì?", 2, [
         "Go",
         "Gd",
         "Au",
@@ -106,23 +106,23 @@ defmodule VnParty.TruthQuestionBank do
         "Pb",
         "Al"
       ]),
-      q("tg8", "Which ocean is the largest by surface area?", 3, [
-        "Atlantic",
-        "Indian",
-        "Arctic",
-        "Pacific",
-        "Southern",
-        "Mediterranean",
-        "Caribbean",
-        "Baltic",
-        "Caspian"
+      q("tg8", "Đại dương nào lớn nhất theo diện tích bề mặt?", 3, [
+        "Đại Tây Dương",
+        "Ấn Độ Dương",
+        "Bắc Băng Dương",
+        "Thái Bình Dương",
+        "Nam Đại Dương",
+        "Biển Địa Trung Hải",
+        "Biển Caribe",
+        "Biển Baltic",
+        "Biển Caspi"
       ])
     ]
   end
 
   defp weird_facts do
     [
-      q("tw1", "Roughly what percentage of people sleep with socks on?", 2, [
+      q("tw1", "Khoảng bao nhiêu phần trăm người ngủ mang tất?", 2, [
         "10%",
         "20%",
         "30%",
@@ -133,42 +133,42 @@ defmodule VnParty.TruthQuestionBank do
         "25%",
         "35%"
       ]),
-      q("tw2", "Honey never spoils because it is highly acidic and low in moisture.", 1, [
-        "Myth",
-        "True",
-        "Only in cold climates",
-        "Only pasteurized honey",
-        "False for raw honey",
-        "Only for 1 year",
-        "Only in glass jars",
-        "Depends on bees",
-        "Only organic honey"
+      q("tw2", "Mật ong không bao giờ hỏng vì có tính axit cao và độ ẩm thấp.", 1, [
+        "Sai",
+        "Đúng",
+        "Chỉ ở khí hậu lạnh",
+        "Chỉ mật ong tiệt trùng",
+        "Sai với mật ong thô",
+        "Chỉ trong 1 năm",
+        "Chỉ trong lọ thủy tinh",
+        "Tùy thuộc vào ong",
+        "Chỉ mật ong hữu cơ"
       ]),
-      q("tw3", "A group of flamingos is called a …", 1, [
-        "Parliament",
-        "Flamboyance",
-        "Convocation",
-        "Huddle",
-        "Flock",
-        "Colony",
-        "Gaggle",
-        "Murder",
-        "Pack"
+      q("tw3", "Một nhóm hồng hạc được gọi là gì?", 1, [
+        "Nghị viện",
+        "Lộng lẫy (Flamboyance)",
+        "Triệu tập",
+        "Quây quần",
+        "Đàn",
+        "Tổ",
+        "Bầy ngỗng",
+        "Đàn quạ",
+        "Bầy"
       ]),
-      q("tw4", "Bananas are berries, but strawberries are not (botanically).", 1, [
-        "False",
-        "True",
-        "Only in tropics",
-        "Only wild types",
-        "Only organic",
-        "Only green ones",
-        "Only dried",
-        "Only hybrids",
-        "Only seedless"
+      q("tw4", "Chuối là quả mọng, nhưng dâu tây thì không (về mặt thực vật học).", 1, [
+        "Sai",
+        "Đúng",
+        "Chỉ ở vùng nhiệt đới",
+        "Chỉ loại hoang dã",
+        "Chỉ loại hữu cơ",
+        "Chỉ loại xanh",
+        "Chỉ loại khô",
+        "Chỉ loại lai",
+        "Chỉ loại không hạt"
       ]),
-      q("tw5", "Humans share about 60% of DNA with bananas (popular science claim).", 1, [
+      q("tw5", "Con người chia sẻ khoảng 60% DNA với chuối (theo khoa học phổ thông).", 1, [
         "0%",
-        "About 60%",
+        "Khoảng 60%",
         "99%",
         "10%",
         "25%",
@@ -177,45 +177,45 @@ defmodule VnParty.TruthQuestionBank do
         "5%",
         "40%"
       ]),
-      q("tw6", "A day on Venus is longer than a year on Venus.", 1, [
-        "False",
-        "True",
-        "Only at the poles",
-        "Only in summer",
-        "Only in orbit",
-        "Only on surface",
-        "Only in atmosphere",
-        "Only for robots",
-        "Only in theory"
+      q("tw6", "Một ngày trên Sao Kim dài hơn một năm trên Sao Kim.", 1, [
+        "Sai",
+        "Đúng",
+        "Chỉ ở hai cực",
+        "Chỉ vào mùa hè",
+        "Chỉ trên quỹ đạo",
+        "Chỉ trên bề mặt",
+        "Chỉ trong khí quyển",
+        "Chỉ đối với robot",
+        "Chỉ trên lý thuyết"
       ]),
-      q("tw7", "Wombat poop is famously cube-shaped.", 1, [
-        "Myth",
-        "True",
-        "Only babies",
-        "Only in zoos",
-        "Only in winter",
-        "Only males",
-        "Only females",
-        "Only at night",
-        "Only in Australia deserts"
+      q("tw7", "Phân của gấu túi wombat có hình khối vuông nổi tiếng.", 1, [
+        "Sai",
+        "Đúng",
+        "Chỉ gấu con",
+        "Chỉ trong vườn thú",
+        "Chỉ vào mùa đông",
+        "Chỉ con đực",
+        "Chỉ con cái",
+        "Chỉ vào ban đêm",
+        "Chỉ ở sa mạc Úc"
       ]),
-      q("tw8", "Sharks existed before trees (rough geological ordering).", 1, [
-        "False",
-        "True",
-        "Same era",
-        "Trees first",
-        "Birds first",
-        "Dinosaurs first",
-        "Humans first",
-        "Fungi first",
-        "Insects first"
+      q("tw8", "Cá mập đã tồn tại trước cả cây cối (theo trình tự địa chất).", 1, [
+        "Sai",
+        "Đúng",
+        "Cùng thời kỳ",
+        "Cây trước",
+        "Chim trước",
+        "Khủng long trước",
+        "Con người trước",
+        "Nấm trước",
+        "Côn trùng trước"
       ])
     ]
   end
 
   defp social_stats do
     [
-      q("ts1", "Most used social app globally by breadth of users?", 3, [
+      q("ts1", "Ứng dụng mạng xã hội được sử dụng rộng rãi nhất toàn cầu?", 3, [
         "TikTok",
         "Instagram",
         "YouTube",
@@ -226,7 +226,7 @@ defmodule VnParty.TruthQuestionBank do
         "Pinterest",
         "Reddit"
       ]),
-      q("ts2", "Which age group reports the most daily screen time on average (typical surveys)?", 1, [
+      q("ts2", "Nhóm tuổi nào có thời gian sử dụng màn hình trung bình nhiều nhất mỗi ngày?", 1, [
         "13–17",
         "18–24",
         "35–44",
@@ -237,7 +237,7 @@ defmodule VnParty.TruthQuestionBank do
         "45–54",
         "55–64"
       ]),
-      q("ts3", "What is the approximate world literacy rate for adults?", 2, [
+      q("ts3", "Tỷ lệ biết chữ của người trưởng thành trên thế giới xấp xỉ bao nhiêu?", 2, [
         "55%",
         "70%",
         "86%",
@@ -248,7 +248,7 @@ defmodule VnParty.TruthQuestionBank do
         "90%",
         "99%"
       ]),
-      q("ts4", "Roughly what share of the world uses the internet (ITU estimate)?", 2, [
+      q("ts4", "Khoảng bao nhiêu phần trăm dân số thế giới sử dụng internet (ước tính ITU)?", 2, [
         "40%",
         "55%",
         "67%",
@@ -259,89 +259,89 @@ defmodule VnParty.TruthQuestionBank do
         "80%",
         "95%"
       ]),
-      q("ts5", "Which metric is commonly used to measure audience engagement on posts?", 1, [
-        "Latency",
-        "Engagement rate",
-        "Bandwidth",
-        "Uptime",
-        "Packet loss",
-        "CPU usage",
+      q("ts5", "Chỉ số nào thường được dùng để đo mức độ tương tác trên bài đăng?", 1, [
+        "Độ trễ",
+        "Tỷ lệ tương tác",
+        "Băng thông",
+        "Thời gian hoạt động",
+        "Mất gói dữ liệu",
+        "Sử dụng CPU",
         "Disk I/O",
         "Ping",
         "Hash rate"
       ]),
-      q("ts6", "A/B testing in product teams is primarily used to…", 0, [
-        "Compare two variants",
-        "Delete user data",
-        "Encrypt passwords",
-        "Ship hardware",
-        "Replace servers",
-        "Ban users",
-        "Close offices",
-        "Print manuals",
-        "Fix printers"
+      q("ts6", "Thử nghiệm A/B trong nhóm sản phẩm chủ yếu được dùng để…", 0, [
+        "So sánh hai phiên bản",
+        "Xóa dữ liệu người dùng",
+        "Mã hóa mật khẩu",
+        "Vận chuyển phần cứng",
+        "Thay thế máy chủ",
+        "Cấm người dùng",
+        "Đóng văn phòng",
+        "In tài liệu",
+        "Sửa máy in"
       ]),
-      q("ts7", "Net Promoter Score (NPS) measures…", 0, [
-        "Likelihood to recommend",
-        "CPU temperature",
-        "Packet loss",
-        "Screen resolution",
-        "Battery voltage",
-        "Fan speed",
+      q("ts7", "Chỉ số Net Promoter Score (NPS) đo…", 0, [
+        "Khả năng giới thiệu",
+        "Nhiệt độ CPU",
+        "Mất gói dữ liệu",
+        "Độ phân giải màn hình",
+        "Điện áp pin",
+        "Tốc độ quạt",
         "RAM timing",
         "GPU shaders",
         "SSD wear"
       ]),
-      q("ts8", "In surveys, a Likert scale typically asks respondents to…", 0, [
-        "Rate agreement on a scale",
-        "Draw a map",
-        "Measure weight",
-        "Record heart rate",
-        "Count steps",
-        "Scan barcode",
-        "Type code",
-        "Upload video",
-        "Share password"
+      q("ts8", "Trong khảo sát, thang đo Likert thường yêu cầu người trả lời…", 0, [
+        "Đánh giá mức độ đồng ý",
+        "Vẽ bản đồ",
+        "Đo cân nặng",
+        "Ghi nhịp tim",
+        "Đếm bước chân",
+        "Quét mã vạch",
+        "Gõ code",
+        "Tải video",
+        "Chia sẻ mật khẩu"
       ])
     ]
   end
 
   defp science_lite do
     [
-      q("tc1", "What gas do plants primarily absorb for photosynthesis?", 2, [
-        "Oxygen",
-        "Nitrogen",
+      q("tc1", "Cây cối chủ yếu hấp thụ khí gì cho quang hợp?", 2, [
+        "Oxy",
+        "Nitơ",
         "Carbon Dioxide",
-        "Helium",
-        "Hydrogen",
-        "Methane",
+        "Heli",
+        "Hydro",
+        "Metan",
         "Argon",
         "Neon",
-        "Chlorine"
+        "Clo"
       ]),
-      q("tc2", "Speed of light in vacuum is approximately?", 2, [
+      q("tc2", "Tốc độ ánh sáng trong chân không xấp xỉ bao nhiêu?", 2, [
         "300 km/s",
-        "3,000 km/s",
-        "300,000 km/s",
-        "3 million km/s",
+        "3.000 km/s",
+        "300.000 km/s",
+        "3 triệu km/s",
         "30 km/s",
-        "30,000 km/s",
-        "3 billion km/s",
+        "30.000 km/s",
+        "3 tỷ km/s",
         "300 m/s",
-        "3,000 m/s"
+        "3.000 m/s"
       ]),
-      q("tc3", "Water boils at 100°C at standard sea-level pressure.", 1, [
-        "False",
-        "True",
-        "Only for salt water",
-        "Only above sea level",
-        "Only in winter",
-        "Only in vacuum",
-        "Only in pressure cooker",
-        "Only at night",
-        "Only in labs"
+      q("tc3", "Nước sôi ở 100°C tại áp suất mực nước biển tiêu chuẩn.", 1, [
+        "Sai",
+        "Đúng",
+        "Chỉ với nước muối",
+        "Chỉ trên mực nước biển",
+        "Chỉ vào mùa đông",
+        "Chỉ trong chân không",
+        "Chỉ trong nồi áp suất",
+        "Chỉ vào ban đêm",
+        "Chỉ trong phòng thí nghiệm"
       ]),
-      q("tc4", "Which particle has a negative electric charge?", 2, [
+      q("tc4", "Hạt nào mang điện tích âm?", 2, [
         "Proton",
         "Neutron",
         "Electron",
@@ -350,42 +350,42 @@ defmodule VnParty.TruthQuestionBank do
         "Neutrino",
         "Positron",
         "Muon+",
-        "Alpha particle"
+        "Hạt alpha"
       ]),
-      q("tc5", "DNA stands for…", 0, [
-        "Deoxyribonucleic acid",
-        "Dynamic nuclear acid",
-        "Dual nitrogen array",
-        "Dense nucleotide atom",
-        "Digital network access",
-        "Diatomic nitric acid",
-        "Derived neural algorithm",
-        "Direct node adapter",
-        "Distributed name authority"
+      q("tc5", "DNA viết tắt của…", 0, [
+        "Axit deoxyribonucleic",
+        "Axit hạt nhân động",
+        "Mảng nitơ kép",
+        "Nguyên tử nucleotide đặc",
+        "Truy cập mạng số",
+        "Axit nitric hai nguyên tử",
+        "Thuật toán thần kinh dẫn xuất",
+        "Bộ chuyển đổi nút trực tiếp",
+        "Cơ quan tên phân tán"
       ]),
-      q("tc6", "Which organelle is the powerhouse of the cell?", 2, [
-        "Nucleus",
+      q("tc6", "Bào quan nào là nhà máy năng lượng của tế bào?", 2, [
+        "Nhân",
         "Ribosome",
-        "Mitochondria",
+        "Ti thể",
         "Golgi",
         "Lysosome",
-        "Vacuole",
-        "Chloroplast",
-        "Centriole",
-        "Cell wall"
+        "Không bào",
+        "Lục lạp",
+        "Trung thể",
+        "Thành tế bào"
       ]),
-      q("tc7", "Sound travels fastest in which medium?", 2, [
-        "Vacuum",
-        "Air",
-        "Steel",
-        "Water",
-        "Space",
-        "Helium balloon",
-        "Cotton",
-        "Foam",
-        "Sand"
+      q("tc7", "Âm thanh truyền nhanh nhất trong môi trường nào?", 2, [
+        "Chân không",
+        "Không khí",
+        "Thép",
+        "Nước",
+        "Không gian",
+        "Bóng bay heli",
+        "Bông",
+        "Xốp",
+        "Cát"
       ]),
-      q("tc8", "The pH of pure water at 25°C is closest to…", 2, [
+      q("tc8", "Độ pH của nước tinh khiết ở 25°C gần nhất với…", 2, [
         "0",
         "1",
         "7",
@@ -401,18 +401,18 @@ defmodule VnParty.TruthQuestionBank do
 
   defp pop_culture do
     [
-      q("tp1", "Which franchise features 'Jedi'?", 0, [
+      q("tp1", "Thương hiệu nào có 'Jedi'?", 0, [
         "Star Wars",
         "Star Trek",
         "Dune",
         "Avatar",
         "Marvel",
         "Harry Potter",
-        "Lord of the Rings",
+        "Chúa Nhẫn",
         "Matrix",
         "Hunger Games"
       ]),
-      q("tp2", "Who wrote the novel '1984'?", 1, [
+      q("tp2", "Ai viết tiểu thuyết '1984'?", 1, [
         "Huxley",
         "Orwell",
         "Bradbury",
@@ -423,18 +423,18 @@ defmodule VnParty.TruthQuestionBank do
         "King",
         "Austen"
       ]),
-      q("tp3", "Pac-Man is a character from which era of gaming?", 0, [
-        "1970s arcade",
-        "1990s PC",
-        "2000s mobile",
-        "2010s VR",
-        "1980s console only",
-        "2020s cloud",
-        "1960s mainframe",
-        "1950s pinball",
-        "2040s neural"
+      q("tp3", "Pac-Man là nhân vật từ kỷ nguyên game nào?", 0, [
+        "Arcade thập niên 1970",
+        "PC thập niên 1990",
+        "Di động thập niên 2000",
+        "VR thập niên 2010",
+        "Console thập niên 1980",
+        "Cloud thập niên 2020",
+        "Mainframe thập niên 1960",
+        "Pinball thập niên 1950",
+        "Neural thập niên 2040"
       ]),
-      q("tp4", "Which band released the album 'Abbey Road'?", 2, [
+      q("tp4", "Ban nhạc nào phát hành album 'Abbey Road'?", 2, [
         "Rolling Stones",
         "Queen",
         "The Beatles",
@@ -445,29 +445,29 @@ defmodule VnParty.TruthQuestionBank do
         "ABBA",
         "Metallica"
       ]),
-      q("tp5", "Studio Ghibli is most associated with which country's animation?", 2, [
-        "USA",
-        "France",
-        "Japan",
-        "Korea",
-        "China",
-        "UK",
+      q("tp5", "Studio Ghibli gắn liền nhất với hoạt hình nước nào?", 2, [
+        "Mỹ",
+        "Pháp",
+        "Nhật Bản",
+        "Hàn Quốc",
+        "Trung Quốc",
+        "Anh",
         "Canada",
-        "Italy",
+        "Ý",
         "Brazil"
       ]),
-      q("tp6", "The character Mario first appeared in which type of game?", 2, [
-        "Racing",
-        "Fighting",
-        "Platformer",
-        "Puzzle",
-        "Sports",
-        "Rhythm",
-        "Horror",
-        "Strategy",
-        "Simulation"
+      q("tp6", "Nhân vật Mario xuất hiện lần đầu trong thể loại game nào?", 2, [
+        "Đua xe",
+        "Đối kháng",
+        "Phiêu lưu hành động",
+        "Giải đố",
+        "Thể thao",
+        "Âm nhạc",
+        "Kinh dị",
+        "Chiến lược",
+        "Mô phỏng"
       ]),
-      q("tp7", "Which streaming platform produced 'Stranger Things'?", 1, [
+      q("tp7", "Nền tảng streaming nào sản xuất 'Stranger Things'?", 1, [
         "Hulu",
         "Netflix",
         "Disney+",
@@ -478,23 +478,23 @@ defmodule VnParty.TruthQuestionBank do
         "Crunchyroll",
         "YouTube"
       ]),
-      q("tp8", "Oscar awards are primarily associated with which industry?", 2, [
-        "Music",
-        "Sports",
-        "Film",
-        "Fashion",
-        "Food",
-        "Tech",
-        "Literature only",
-        "Theater only",
-        "Video games"
+      q("tp8", "Giải Oscar chủ yếu gắn liền với ngành nào?", 2, [
+        "Âm nhạc",
+        "Thể thao",
+        "Điện ảnh",
+        "Thời trang",
+        "Ẩm thực",
+        "Công nghệ",
+        "Chỉ văn học",
+        "Chỉ kịch nghệ",
+        "Trò chơi điện tử"
       ])
     ]
   end
 
   defp history do
     [
-      q("th1", "World War II ended in Europe in which year?", 2, [
+      q("th1", "Thế chiến II kết thúc ở Châu Âu vào năm nào?", 2, [
         "1943",
         "1944",
         "1945",
@@ -505,7 +505,7 @@ defmodule VnParty.TruthQuestionBank do
         "1942",
         "1947"
       ]),
-      q("th2", "The Berlin Wall fell in which year?", 1, [
+      q("th2", "Bức tường Berlin sụp đổ vào năm nào?", 1, [
         "1987",
         "1989",
         "1991",
@@ -516,29 +516,29 @@ defmodule VnParty.TruthQuestionBank do
         "1990",
         "1992"
       ]),
-      q("th3", "Ancient Olympic Games originated in?", 1, [
-        "Rome",
-        "Greece",
-        "Egypt",
-        "Persia",
-        "China",
-        "India",
-        "Britain",
+      q("th3", "Thế vận hội cổ đại bắt nguồn từ đâu?", 1, [
+        "La Mã",
+        "Hy Lạp",
+        "Ai Cập",
+        "Ba Tư",
+        "Trung Quốc",
+        "Ấn Độ",
+        "Anh",
         "Maya",
-        "Viking lands"
+        "Vùng đất Viking"
       ]),
-      q("th4", "The French Revolution began in which century?", 2, [
-        "16th",
-        "17th",
-        "18th",
-        "19th",
-        "20th",
-        "15th",
-        "14th",
-        "21st",
-        "12th"
+      q("th4", "Cách mạng Pháp bắt đầu vào thế kỷ nào?", 2, [
+        "16",
+        "17",
+        "18",
+        "19",
+        "20",
+        "15",
+        "14",
+        "21",
+        "12"
       ]),
-      q("th5", "Who was the first President of the United States?", 1, [
+      q("th5", "Ai là Tổng thống đầu tiên của Hoa Kỳ?", 1, [
         "Jefferson",
         "Washington",
         "Lincoln",
@@ -549,18 +549,18 @@ defmodule VnParty.TruthQuestionBank do
         "Roosevelt",
         "Kennedy"
       ]),
-      q("th6", "The Roman Empire's capital was primarily…", 1, [
+      q("th6", "Thủ đô chính của Đế chế La Mã là…", 1, [
         "Athens",
         "Rome",
         "Carthage",
         "Alexandria",
         "Paris",
         "London",
-        "Constantinople only always",
+        "Chỉ Constantinople",
         "Jerusalem",
         "Venice"
       ]),
-      q("th7", "The printing press was popularized in Europe by…", 2, [
+      q("th7", "Máy in được phổ biến ở Châu Âu bởi…", 2, [
         "Galileo",
         "Newton",
         "Gutenberg",
@@ -571,209 +571,209 @@ defmodule VnParty.TruthQuestionBank do
         "Edison",
         "Curie"
       ]),
-      q("th8", "The Magna Carta was signed in which country?", 2, [
-        "France",
-        "Spain",
-        "England",
-        "Germany",
-        "Italy",
-        "Scotland only",
+      q("th8", "Đại Hiến chương Magna Carta được ký ở quốc gia nào?", 2, [
+        "Pháp",
+        "Tây Ban Nha",
+        "Anh",
+        "Đức",
+        "Ý",
+        "Chỉ Scotland",
         "Ireland",
-        "Portugal",
-        "Netherlands"
+        "Bồ Đào Nha",
+        "Hà Lan"
       ])
     ]
   end
 
   defp geography do
     [
-      q("tgeo1", "What is the longest river in the world (common geographic claim)?", 1, [
+      q("tgeo1", "Con sông dài nhất thế giới là gì (theo địa lý phổ thông)?", 1, [
         "Amazon",
         "Nile",
-        "Yangtze",
+        "Dương Tử",
         "Mississippi",
         "Danube",
         "Rhine",
         "Thames",
         "Mekong",
-        "Ganges"
+        "Hằng Hà"
       ]),
-      q("tgeo2", "Mount Everest lies on the border of Nepal and which country?", 1, [
-        "India",
-        "China",
+      q("tgeo2", "Đỉnh Everest nằm trên biên giới Nepal và quốc gia nào?", 1, [
+        "Ấn Độ",
+        "Trung Quốc",
         "Bhutan",
         "Pakistan",
         "Bangladesh",
         "Myanmar",
-        "Tibet only (historic)",
+        "Chỉ Tây Tạng (lịch sử)",
         "Afghanistan",
-        "Laos"
+        "Lào"
       ]),
-      q("tgeo3", "Which is the smallest continent?", 1, [
-        "Europe",
-        "Australia",
-        "Antarctica",
-        "South America",
-        "Africa",
-        "Asia",
-        "North America",
+      q("tgeo3", "Châu lục nhỏ nhất là?", 1, [
+        "Châu Âu",
+        "Châu Úc",
+        "Nam Cực",
+        "Nam Mỹ",
+        "Châu Phi",
+        "Châu Á",
+        "Bắc Mỹ",
         "Greenland",
-        "Oceania is not a continent"
+        "Châu Đại Dương không phải châu lục"
       ]),
-      q("tgeo4", "Which country has the largest land area?", 2, [
-        "USA",
-        "China",
-        "Russia",
+      q("tgeo4", "Quốc gia nào có diện tích đất lớn nhất?", 2, [
+        "Mỹ",
+        "Trung Quốc",
+        "Nga",
         "Canada",
         "Brazil",
-        "Australia",
-        "India",
+        "Úc",
+        "Ấn Độ",
         "Argentina",
         "Kazakhstan"
       ]),
-      q("tgeo5", "The Sahara is primarily located on which continent?", 2, [
-        "Asia",
-        "Europe",
-        "Africa",
-        "Australia",
-        "South America",
-        "Antarctica",
-        "North America",
-        "Oceania",
-        "Arctic"
+      q("tgeo5", "Sa mạc Sahara chủ yếu nằm ở châu lục nào?", 2, [
+        "Châu Á",
+        "Châu Âu",
+        "Châu Phi",
+        "Châu Úc",
+        "Nam Mỹ",
+        "Nam Cực",
+        "Bắc Mỹ",
+        "Châu Đại Dương",
+        "Bắc Cực"
       ]),
-      q("tgeo6", "Which city is the capital of Japan?", 2, [
+      q("tgeo6", "Thành phố nào là thủ đô của Nhật Bản?", 2, [
         "Osaka",
         "Kyoto",
         "Tokyo",
         "Seoul",
-        "Beijing",
+        "Bắc Kinh",
         "Bangkok",
         "Manila",
-        "Hanoi",
-        "Taipei"
+        "Hà Nội",
+        "Đài Bắc"
       ]),
-      q("tgeo7", "Which sea is the Dead Sea?", 2, [
-        "Atlantic",
-        "Pacific",
-        "Landlocked salt lake",
-        "Indian Ocean",
-        "Arctic Ocean",
-        "Caribbean",
-        "Mediterranean",
-        "Baltic",
-        "Caspian only"
+      q("tgeo7", "Biển Chết thực chất là gì?", 2, [
+        "Đại Tây Dương",
+        "Thái Bình Dương",
+        "Hồ muối nội địa",
+        "Ấn Độ Dương",
+        "Bắc Băng Dương",
+        "Biển Caribe",
+        "Biển Địa Trung Hải",
+        "Biển Baltic",
+        "Chỉ Biển Caspi"
       ]),
-      q("tgeo8", "Which country is both in Europe and Asia (transcontinental)?", 2, [
-        "Italy",
-        "Spain",
-        "Turkey",
-        "Portugal",
-        "Greece",
-        "Poland",
-        "Sweden",
+      q("tgeo8", "Quốc gia nào nằm ở cả Châu Âu và Châu Á (xuyên lục địa)?", 2, [
+        "Ý",
+        "Tây Ban Nha",
+        "Thổ Nhĩ Kỳ",
+        "Bồ Đào Nha",
+        "Hy Lạp",
+        "Ba Lan",
+        "Thụy Điển",
         "Ireland",
-        "Belgium"
+        "Bỉ"
       ])
     ]
   end
 
   defp food_culture do
     [
-      q("tf1", "Traditional Japanese fermented soybeans are called?", 1, [
+      q("tf1", "Đậu nành lên men truyền thống của Nhật Bản gọi là gì?", 1, [
         "Miso",
         "Natto",
         "Tempeh",
         "Kimchi",
-        "Tofu",
-        "Soy sauce",
+        "Đậu phụ",
+        "Nước tương",
         "Edamame",
         "Sake",
         "Wasabi"
       ]),
-      q("tf2", "Which country is the largest producer of coffee beans?", 2, [
-        "Vietnam",
+      q("tf2", "Quốc gia nào sản xuất cà phê nhiều nhất?", 2, [
+        "Việt Nam",
         "Colombia",
         "Brazil",
         "Ethiopia",
         "Indonesia",
-        "USA",
-        "Italy",
-        "France",
-        "Japan"
+        "Mỹ",
+        "Ý",
+        "Pháp",
+        "Nhật Bản"
       ]),
-      q("tf3", "Pho is most associated with the cuisine of?", 1, [
-        "Thailand",
-        "Vietnam",
-        "China",
-        "Japan",
-        "Korea",
-        "Laos",
-        "Cambodia",
+      q("tf3", "Phở gắn liền nhất với ẩm thực nước nào?", 1, [
+        "Thái Lan",
+        "Việt Nam",
+        "Trung Quốc",
+        "Nhật Bản",
+        "Hàn Quốc",
+        "Lào",
+        "Campuchia",
         "Malaysia",
         "Philippines"
       ]),
-      q("tf4", "Sushi traditionally uses which staple grain?", 2, [
-        "Wheat",
-        "Corn",
-        "Rice",
-        "Barley",
-        "Oats",
+      q("tf4", "Sushi truyền thống sử dụng loại ngũ cốc chính nào?", 2, [
+        "Lúa mì",
+        "Ngô",
+        "Gạo",
+        "Lúa mạch",
+        "Yến mạch",
         "Quinoa",
-        "Rye",
-        "Millet",
-        "Buckwheat"
+        "Lúa mạch đen",
+        "Kê",
+        "Kiều mạch"
       ]),
-      q("tf5", "Which cheese is Italian and often used on pizza?", 2, [
+      q("tf5", "Loại phô mai Ý nào thường dùng trên pizza?", 2, [
         "Cheddar",
         "Brie",
         "Mozzarella",
         "Gouda",
         "Feta",
-        "Swiss",
+        "Phô mai Thụy Sĩ",
         "Blue Stilton",
         "Camembert",
-        "Parmesan only for dessert"
+        "Chỉ Parmesan cho tráng miệng"
       ]),
-      q("tf6", "Champagne is named after a region in which country?", 2, [
-        "Italy",
-        "Spain",
-        "France",
-        "Germany",
-        "USA",
-        "Australia",
+      q("tf6", "Rượu Champagne được đặt tên theo vùng nào ở quốc gia nào?", 2, [
+        "Ý",
+        "Tây Ban Nha",
+        "Pháp",
+        "Đức",
+        "Mỹ",
+        "Úc",
         "Chile",
-        "Portugal",
-        "Greece"
+        "Bồ Đào Nha",
+        "Hy Lạp"
       ]),
-      q("tf7", "Which spice is derived from dried bark?", 2, [
-        "Pepper",
-        "Cumin",
-        "Cinnamon",
-        "Turmeric",
+      q("tf7", "Gia vị nào được chiết xuất từ vỏ cây khô?", 2, [
+        "Tiêu",
+        "Thì là",
+        "Quế",
+        "Nghệ",
         "Paprika",
         "Oregano",
-        "Basil",
-        "Thyme",
-        "Nutmeg only from nut"
+        "Húng quế",
+        "Cỏ xạ hương",
+        "Chỉ nhục đậu khấu từ hạt"
       ]),
-      q("tf8", "Matcha is a powdered form of which drink base?", 2, [
-        "Coffee",
-        "Cocoa",
-        "Green tea",
-        "Black tea",
-        "Herbal mint",
+      q("tf8", "Matcha là dạng bột của loại đồ uống gì?", 2, [
+        "Cà phê",
+        "Ca cao",
+        "Trà xanh",
+        "Trà đen",
+        "Bạc hà thảo mộc",
         "Rooibos",
-        "Chai spice mix",
+        "Hỗn hợp gia vị Chai",
         "Espresso",
-        "Oolong only"
+        "Chỉ Oolong"
       ])
     ]
   end
 
   defp sports_lite do
     [
-      q("tsp1", "How many players per team are on the court in basketball?", 1, [
+      q("tsp1", "Mỗi đội bóng rổ có bao nhiêu cầu thủ trên sân?", 1, [
         "4",
         "5",
         "6",
@@ -784,29 +784,29 @@ defmodule VnParty.TruthQuestionBank do
         "11",
         "12"
       ]),
-      q("tsp2", "The FIFA World Cup is held every …", 2, [
-        "2 years",
-        "3 years",
-        "4 years",
-        "5 years",
-        "1 year",
-        "6 years",
-        "8 years",
-        "10 years",
-        "12 years"
+      q("tsp2", "FIFA World Cup được tổ chức mỗi…", 2, [
+        "2 năm",
+        "3 năm",
+        "4 năm",
+        "5 năm",
+        "1 năm",
+        "6 năm",
+        "8 năm",
+        "10 năm",
+        "12 năm"
       ]),
-      q("tsp3", "Tennis scores use 'love' to mean …", 2, [
-        "Advantage",
-        "Deuce",
-        "Zero",
-        "Match point",
-        "Tiebreak",
-        "Fault",
-        "Ace",
+      q("tsp3", "Trong tennis, 'love' có nghĩa là…", 2, [
+        "Lợi thế",
+        "Hòa",
+        "Không điểm",
+        "Điểm trận",
+        "Tie-break",
+        "Lỗi",
+        "Giao bóng ăn điểm",
         "Let",
-        "Set point"
+        "Điểm set"
       ]),
-      q("tsp4", "How long is a standard marathon (approx.)?", 2, [
+      q("tsp4", "Cuộc đua marathon tiêu chuẩn dài bao nhiêu (xấp xỉ)?", 2, [
         "10 km",
         "21 km",
         "42 km",
@@ -817,18 +817,18 @@ defmodule VnParty.TruthQuestionBank do
         "30 km",
         "60 km"
       ]),
-      q("tsp5", "Which sport uses a puck?", 2, [
-        "Soccer",
-        "Basketball",
-        "Ice hockey",
+      q("tsp5", "Môn thể thao nào sử dụng quả bóng gỗ phẳng (puck)?", 2, [
+        "Bóng đá",
+        "Bóng rổ",
+        "Khúc côn cầu trên băng",
         "Tennis",
         "Golf",
         "Cricket",
-        "Rugby",
-        "Volleyball",
-        "Badminton"
+        "Bóng bầu dục",
+        "Bóng chuyền",
+        "Cầu lông"
       ]),
-      q("tsp6", "The Olympics symbol has how many interlocking rings?", 3, [
+      q("tsp6", "Biểu tượng Olympic có bao nhiêu vòng tròn đan xen?", 3, [
         "3",
         "4",
         "5",
@@ -839,34 +839,34 @@ defmodule VnParty.TruthQuestionBank do
         "10",
         "12"
       ]),
-      q("tsp7", "In soccer, a hat-trick means a player scored …", 2, [
-        "1 goal",
-        "2 goals",
-        "3 goals",
-        "4 goals",
-        "5 goals",
-        "An own goal",
-        "A penalty only",
-        "A header only",
-        "No goals"
+      q("tsp7", "Trong bóng đá, hat-trick nghĩa là cầu thủ ghi…", 2, [
+        "1 bàn",
+        "2 bàn",
+        "3 bàn",
+        "4 bàn",
+        "5 bàn",
+        "Phản lưới nhà",
+        "Chỉ phạt đền",
+        "Chỉ đánh đầu",
+        "Không bàn"
       ]),
-      q("tsp8", "Which country invented modern judo?", 2, [
-        "China",
-        "Korea",
-        "Japan",
+      q("tsp8", "Quốc gia nào phát minh ra judo hiện đại?", 2, [
+        "Trung Quốc",
+        "Hàn Quốc",
+        "Nhật Bản",
         "Brazil",
-        "USA",
-        "Russia",
-        "France",
-        "UK",
-        "Mongolia"
+        "Mỹ",
+        "Nga",
+        "Pháp",
+        "Anh",
+        "Mông Cổ"
       ])
     ]
   end
 
   defp technology do
     [
-      q("tt1", "HTTP stands for …", 0, [
+      q("tt1", "HTTP viết tắt của…", 0, [
         "HyperText Transfer Protocol",
         "High Transfer Text Process",
         "Hosted Text Transmission Packet",
@@ -877,8 +877,8 @@ defmodule VnParty.TruthQuestionBank do
         "Hardware Test Transport Protocol",
         "Hash Token Transfer Package"
       ]),
-      q("tt2", "Which company created the Linux kernel?", 0, [
-        "Torvalds (personal project)",
+      q("tt2", "Ai tạo ra nhân Linux?", 0, [
+        "Torvalds (dự án cá nhân)",
         "Microsoft",
         "IBM",
         "Apple",
@@ -888,7 +888,7 @@ defmodule VnParty.TruthQuestionBank do
         "Adobe",
         "SAP"
       ]),
-      q("tt3", "What does CPU stand for?", 0, [
+      q("tt3", "CPU viết tắt của…", 0, [
         "Central Processing Unit",
         "Computer Personal Utility",
         "Core Program Utility",
@@ -899,7 +899,7 @@ defmodule VnParty.TruthQuestionBank do
         "Control Panel Unit",
         "Cluster Parallel Unit"
       ]),
-      q("tt4", "Which language runs in the browser alongside HTML/CSS?", 2, [
+      q("tt4", "Ngôn ngữ nào chạy trong trình duyệt cùng HTML/CSS?", 2, [
         "Python",
         "Java",
         "JavaScript",
@@ -910,40 +910,40 @@ defmodule VnParty.TruthQuestionBank do
         "Kotlin",
         "Ruby"
       ]),
-      q("tt5", "RAM is generally …", 1, [
-        "Permanent storage",
-        "Volatile memory",
-        "Optical disk",
-        "Magnetic tape",
-        "Network cable",
+      q("tt5", "RAM thường là…", 1, [
+        "Bộ nhớ vĩnh viễn",
+        "Bộ nhớ tạm thời",
+        "Đĩa quang",
+        "Băng từ",
+        "Cáp mạng",
         "GPU shader",
-        "Power supply",
-        "Cooling fan",
-        "Motherboard screw"
+        "Nguồn điện",
+        "Quạt tản nhiệt",
+        "Ốc vít bo mạch chủ"
       ]),
-      q("tt6", "Git is primarily used for …", 2, [
-        "Image editing",
-        "Video streaming",
-        "Version control",
-        "Email hosting",
-        "DNS routing",
-        "3D printing",
-        "Music mixing",
-        "Spreadsheets",
-        "Antivirus scans"
+      q("tt6", "Git chủ yếu được dùng cho…", 2, [
+        "Chỉnh sửa ảnh",
+        "Phát video trực tuyến",
+        "Quản lý phiên bản",
+        "Lưu trữ email",
+        "Định tuyến DNS",
+        "In 3D",
+        "Trộn nhạc",
+        "Bảng tính",
+        "Quét virus"
       ]),
-      q("tt7", "HTTPS adds which layer on top of HTTP?", 2, [
+      q("tt7", "HTTPS thêm lớp nào trên HTTP?", 2, [
         "FTP",
         "SMTP",
-        "TLS/SSL encryption",
+        "Mã hóa TLS/SSL",
         "ICMP",
         "ARP",
-        "UDP only",
+        "Chỉ UDP",
         "Telnet",
         "SNMP",
         "POP3"
       ]),
-      q("tt8", "A URL's domain name is resolved using …", 2, [
+      q("tt8", "Tên miền trong URL được phân giải bằng…", 2, [
         "HTTP",
         "FTP",
         "DNS",

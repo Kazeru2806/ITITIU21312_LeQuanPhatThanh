@@ -21,7 +21,7 @@ export function GamePage() {
     const [showResult, setShowResult] = useState(false);
     const [phase, setPhase] = useState<'transition' | 'discussion' | 'answering' | 'results'>('discussion');
     const [prediction, setPrediction] = useState<string | null>(null);
-    const [truthStats, setTruthStats] = useState<Array<{ player_id: string; tp: number; di: number; ps: number; charges: number }> | null>(null);
+    const [truthStats, setTruthStats] = useState<Array<{ player_id: string; tp: number; di: number; ps: number; charges: number; used_powers?: Record<string, number> }> | null>(null);
     const [pendingDistortion, setPendingDistortion] = useState<'remove_option' | 'swap_category' | 'force_blind' | 'inject_fake_option' | null>(null);
     const [distortionToast, setDistortionToast] = useState<string | null>(null);
     const [distortionTarget, setDistortionTarget] = useState<string>('');
@@ -152,28 +152,7 @@ export function GamePage() {
         }
     }, [storeHydrated, playerId, roomCode, nickname, navigate]);
 
-    // Fallback if WebSocket room_closed was missed (mobile sleep / reconnect).
-    useEffect(() => {
-        if (!roomCode) return;
-        let cancelled = false;
-        const poll = async () => {
-            try {
-                const res = await api.getRoom(roomCode);
-                if (!cancelled && res.success && res.room?.state === 'game_end') {
-                    reset();
-                    navigate('/');
-                }
-            } catch {
-                // ignore
-            }
-        };
-        poll();
-        const id = window.setInterval(poll, 2500);
-        return () => {
-            cancelled = true;
-            window.clearInterval(id);
-        };
-    }, [roomCode, navigate, reset]);
+    // Game-end is handled via WebSocket 'game_ended' event — no polling needed.
 
     const applyTruthResume = (resume: TruthResume) => {
         if (resume.phase === 'transition') {
@@ -433,7 +412,7 @@ export function GamePage() {
         },
         onRoomClosed: (data) => {
             setRoomClosed({
-                message: data?.message ?? 'The host ended this room.',
+                message: data?.message ?? 'Chủ phòng đã đóng phòng này.',
                 redirect_seconds: data?.redirect_seconds ?? 3,
             });
             window.setTimeout(() => {
@@ -533,13 +512,9 @@ export function GamePage() {
         onTruthStatsUpdated: (data) => {
             if (data?.stats) setTruthStats(data.stats);
         },
-        onGameEnded: (data: { room_closed?: boolean; forced?: boolean; message?: string }) => {
-            if (data?.room_closed || data?.forced) {
-                reset();
-                navigate('/');
-                return;
-            }
-            setTimeout(() => navigate('/results'), 2000);
+        onGameEnded: (_data: { room_closed?: boolean; forced?: boolean; message?: string }) => {
+            // Always navigate to results/rematch screen — never kick to home
+            setTimeout(() => navigate('/results'), 1500);
         },
         onRoomResetToLobby: (data) => {
             if (data?.players) useGameStore.getState().setPlayers(data.players as any);
@@ -683,13 +658,13 @@ export function GamePage() {
             try {
                 const applyRes = await api.useDistortion(roomCode, playerId, distortionPayload);
                 if (!applyRes.success) {
-                    throw new Error(applyRes.error || 'Power could not be applied');
+                    throw new Error(applyRes.error || 'Không thể sử dụng sức mạnh');
                 }
                 powerApplied = true;
                 setPendingDistortion(null);
             } catch (powerErr) {
                 const reason =
-                    powerErr instanceof Error ? powerErr.message : 'Power could not be applied';
+                    powerErr instanceof Error ? powerErr.message : 'Không thể sử dụng sức mạnh';
                 setDistortionToast(`Power failed — ${reason}`);
                 console.error('use_distortion HTTP failed', powerErr);
             }
@@ -722,7 +697,7 @@ export function GamePage() {
                 const msg =
                     wsErr instanceof Error
                         ? wsErr.message
-                        : 'Could not confirm — check connection.';
+                        : 'Không thể xác nhận — kiểm tra kết nối.';
                 setDistortionToast(msg);
                 setResultsReadyLocal(false);
                 console.error('truth_results_ready failed (HTTP + WS)', httpErr, wsErr);
@@ -743,7 +718,7 @@ export function GamePage() {
             if (res.distortion_note === 'distortion_applied') {
                 setPendingDistortion(null);
             } else if (res.distortion_note) {
-                setDistortionToast(`Power failed — ${res.distortion_note}`);
+                setDistortionToast(`Sức mạnh thất bại — ${res.distortion_note}`);
                 console.error('distortion apply failed', res.distortion_note);
             }
         }
@@ -751,10 +726,10 @@ export function GamePage() {
         if (hadPendingPower && !willApplyPower) {
             const hint =
                 pendingDistortion === 'remove_option'
-                    ? 'Ready counted — pick a target before Done to use Remove option.'
+                    ? 'Đã sẵn sàng — chọn mục tiêu trước khi nhấn Xong để dùng Xóa đáp án.'
                     : pendingDistortion === 'inject_fake_option'
-                      ? 'Ready counted — lock inject and enter text before Done to use it.'
-                      : 'Ready counted — complete power setup to apply it next time.';
+                      ? 'Đã sẵn sàng — khóa chèn và nhập nội dung trước khi nhấn Xong.'
+                      : 'Đã sẵn sàng — hoàn tất thiết lập sức mạnh để dùng lần sau.';
             setDistortionToast(hint);
         }
 
@@ -789,14 +764,14 @@ export function GamePage() {
             const res: any = await lockFakeOption();
             setFakeLockConfirmed(true);
             setFakePreview(res?.preview_question || null);
-            setDistortionToast('Fake lock confirmed. Enter your sabotaged answer.');
+            setDistortionToast('Đã khóa chèn. Nhập đáp án giả của bạn.');
             window.setTimeout(() => {
                 setDistortionToast(null);
             }, 2200);
         } catch (err) {
             const reason =
                 typeof err === 'object' && err !== null ? (err as any).reason || (err as any).message : null;
-            setDistortionToast(reason || 'Failed to confirm fake lock.');
+            setDistortionToast(reason || 'Không thể khóa chèn.');
         }
     };
 
@@ -952,7 +927,7 @@ export function GamePage() {
                         <div className="mb-6 p-4 rounded-xl border-2 border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50 min-h-[120px]">
                             <p className="text-xs font-black text-purple-600 uppercase tracking-widest">Theme</p>
                             <p className="text-2xl font-black text-pink-700">
-                                {discussionMeta?.categoryLabel ?? 'Loading theme…'}
+                                {discussionMeta?.categoryLabel ?? 'Đang tải chủ đề…'}
                             </p>
                             {discussionMeta?.timelineLabels && discussionMeta.timelineLabels.length > 1 ? (
                                 <p className="text-sm text-gray-700 mt-2">
@@ -1027,9 +1002,9 @@ export function GamePage() {
                                 </div>
                             </div>
                             <PhoThePhoenix className="w-24 h-28 mx-auto drop-shadow-lg mb-3" />
-                            <p className="text-2xl font-black text-purple-700">Round results</p>
+                            <p className="text-2xl font-black text-purple-700">Kết quả vòng chơi</p>
                             <p className="text-gray-700 font-semibold mt-2">
-                                Next round in {resultsLeft}s — look at the host screen for scores
+                                Vòng tiếp theo trong {resultsLeft}s — xem kết quả trên màn hình chính
                             </p>
                         </div>
                         <TruthDistortionPanel
@@ -1046,7 +1021,8 @@ export function GamePage() {
                             readySent={playerResultsReady}
                             readySubmitting={resultsReadySending}
                             readyProgress={resultsReadyProgress}
-                            doneLabel="Done — ready for next round"
+                            doneLabel="Xong — sẵn sàng vòng tiếp theo"
+                            usedPowers={myTruth?.used_powers ?? {}}
                             onToggleDistortion={handleToggleDistortion}
                             onSetDistortionTarget={setDistortionTarget}
                             onSetFakeOptionText={setFakeOptionText}
@@ -1159,10 +1135,10 @@ export function GamePage() {
                         {players.map((p) => {
                             const committed = committedIds.has(p.id);
                             const status = !p.connected
-                                ? 'Disconnected'
+                                ? 'Mất kết nối'
                                 : committed
-                                  ? 'Answered'
-                                  : 'Playing';
+                                  ? 'Đã trả lời'
+                                  : 'Đang chơi';
                             return (
                                 <div
                                     key={p.id}
@@ -1225,10 +1201,10 @@ export function GamePage() {
                                         color: "#9D4EDD",
                                         textShadow: "3px 3px 0px #FF6B9D"
                                     }}>
-                                        {mode === 'truth_collapse' && phase === 'discussion' ? 'Discussion Phase' : 'Pick your answer'}
+                                        {mode === 'truth_collapse' && phase === 'discussion' ? 'Giai đoạn thảo luận' : 'Chọn đáp án'}
                                     </h2>
                                     <p className="text-xl lg:text-2xl text-gray-600 font-semibold">
-                                        Look at the host screen for the question
+                                        Xem câu hỏi trên màn hình chính
                                     </p>
                                 </div>
 
@@ -1281,7 +1257,7 @@ export function GamePage() {
                                         color: selectedAnswer ? "#FFFFFF" : "#999999"
                                     }}
                                 >
-                                    {selectedAnswer ? 'Lock in answer' : 'Choose an answer'}
+                                    {selectedAnswer ? 'Khóa đáp án' : 'Chọn một đáp án'}
                                 </button>
                             )}
 
@@ -1289,7 +1265,7 @@ export function GamePage() {
                             {hasCommitted && !showResult && (
                                 <div className="mt-6 text-center p-5 lg:p-8 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200">
                                     <p className="text-purple-700 font-black text-lg lg:text-2xl">
-                                        Answer submitted! Waiting for others...
+                                        Đã gửi đáp án! Đang chờ người khác...
                                     </p>
                                 </div>
                             )}
@@ -1298,10 +1274,10 @@ export function GamePage() {
                             {showResult && (
                                 <div className="mt-6 text-center p-6 lg:p-10 rounded-xl border-3 shadow-lg bg-gradient-to-r from-purple-50 to-pink-50 border-purple-400">
                                     <p className="text-2xl lg:text-4xl font-black mb-2 lg:mb-4 text-purple-700">
-                                        Answer submitted!
+                                        Đã gửi đáp án!
                                     </p>
                                     <p className="text-xl lg:text-2xl text-gray-700 mt-2 lg:mt-4 font-semibold">
-                                        Look at the host screen for results
+                                        Xem kết quả trên màn hình chính
                                     </p>
                                 </div>
                             )}
@@ -1312,7 +1288,7 @@ export function GamePage() {
                         {showResult && (
                             <div className="text-center mt-4 p-5 lg:p-8 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200">
                                 <p className="text-purple-700 font-black text-lg lg:text-2xl">
-                                    Look at the host screen for results and the next question
+                                    Xem kết quả và câu hỏi tiếp theo trên màn hình chính
                                 </p>
                             </div>
                         )}

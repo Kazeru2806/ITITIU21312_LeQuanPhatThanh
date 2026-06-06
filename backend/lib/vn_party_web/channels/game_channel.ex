@@ -1355,7 +1355,7 @@ defmodule VnPartyWeb.GameChannel do
 
   @results_phase_seconds 45
   @min_questions_per_category 8
-  @min_truth_options 9
+  @min_truth_options 4
 
   # Results-screen picks target the upcoming round; after advance, discussion/transition target current round.
   defp distortion_effect_round(room, "results") do
@@ -2012,8 +2012,10 @@ defmodule VnPartyWeb.GameChannel do
   defp resize_truth_options_for_players(%{injected_option_ids: ids} = q, _) when is_list(ids) and ids != [], do: q
 
   defp resize_truth_options_for_players(%{options: options} = q, connected_n) do
-    want = max(min(connected_n + 1, length(options)), min(length(options), 4))
-    want = min(want, @min_truth_options)
+    # Target: one option per connected player + 1, floor at @min_truth_options, cap at available
+    want = connected_n + 1
+    want = max(want, @min_truth_options)
+    want = min(want, length(options))
     correct_ids = if is_list(q.correct), do: q.correct, else: [q.correct]
     kept_correct = Enum.filter(options, fn o -> o.id in correct_ids end)
     wrongs = Enum.reject(options, fn o -> o.id in correct_ids end)
@@ -2234,6 +2236,16 @@ defmodule VnPartyWeb.GameChannel do
     end
   end
 
+  defp get_player_used_powers(room_id, player_id) do
+    powers = ~w(remove_option swap_category force_blind inject_fake_option merge_realities)
+    Enum.into(powers, %{}, fn action ->
+      case :ets.lookup(:distortion_usage, {room_id, player_id, action}) do
+        [{_, n}] -> {action, n}
+        _ -> {action, 0}
+      end
+    end)
+  end
+
   defp update_truth_stats(player_id, fun) do
     current = get_truth_stats(player_id)
     updated = fun.(current)
@@ -2298,18 +2310,18 @@ defmodule VnPartyWeb.GameChannel do
     end
   end
 
-  defp truth_category_label("general"), do: "General"
-  defp truth_category_label("weird_facts"), do: "Weird Facts"
-  defp truth_category_label("social_stats"), do: "Social & Stats"
-  defp truth_category_label("science_lite"), do: "Science (Lite)"
-  defp truth_category_label("pop_culture"), do: "Pop Culture"
-  defp truth_category_label("history"), do: "History"
-  defp truth_category_label("geography"), do: "Geography"
-  defp truth_category_label("food_culture"), do: "Food & Culture"
-  defp truth_category_label("sports_lite"), do: "Sports (Lite)"
-  defp truth_category_label("technology"), do: "Technology"
+  defp truth_category_label("general"), do: "Kiến Thức Chung"
+  defp truth_category_label("weird_facts"), do: "Sự Thật Kỳ Lạ"
+  defp truth_category_label("social_stats"), do: "Xã Hội & Thống Kê"
+  defp truth_category_label("science_lite"), do: "Khoa Học Vui"
+  defp truth_category_label("pop_culture"), do: "Văn Hóa Đại Chúng"
+  defp truth_category_label("history"), do: "Lịch Sử"
+  defp truth_category_label("geography"), do: "Địa Lý"
+  defp truth_category_label("food_culture"), do: "Ẩm Thực & Văn Hóa"
+  defp truth_category_label("sports_lite"), do: "Thể Thao Vui"
+  defp truth_category_label("technology"), do: "Công Nghệ"
   defp truth_category_label(other) when is_binary(other), do: String.replace(other, "_", " ") |> String.capitalize()
-  defp truth_category_label(_), do: "Unknown"
+  defp truth_category_label(_), do: "Không Rõ"
 
   defp merge_realities_used?(room_id, round) do
     prior_round = round - 1
@@ -2539,7 +2551,8 @@ defmodule VnPartyWeb.GameChannel do
     stats_public =
       Enum.map(players_after, fn p ->
         s = get_truth_stats(p.id)
-        %{player_id: p.id, tp: s.tp, di: s.di, ps: s.ps, charges: s.charges}
+        used = get_player_used_powers(room_id, p.id)
+        %{player_id: p.id, tp: s.tp, di: s.di, ps: s.ps, charges: s.charges, used_powers: used}
       end)
 
     results_ends_at = System.system_time(:millisecond) + @results_phase_seconds * 1000
@@ -2853,44 +2866,44 @@ defmodule VnPartyWeb.GameChannel do
   defp generated_truth_prompt_and_choices(cat, _n) do
     case cat do
       "technology" ->
-        {"Which term is directly related to computing?",
-         ["Database", "Compiler", "Kernel", "API", "Cache", "Router", "Firewall", "Protocol", "Algorithm"]}
+        {"Thuật ngữ nào liên quan trực tiếp đến máy tính?",
+         ["Cơ sở dữ liệu", "Trình biên dịch", "Nhân hệ điều hành", "API", "Bộ nhớ đệm", "Bộ định tuyến", "Tường lửa", "Giao thức", "Thuật toán"]}
 
       "geography" ->
-        {"Which place is a country?",
+        {"Đâu là một quốc gia?",
          ["Peru", "Chile", "Ecuador", "Bolivia", "Paraguay", "Uruguay", "Colombia", "Venezuela", "Guyana"]}
 
       "history" ->
-        {"Which item is a historical era?",
-         ["Renaissance", "Enlightenment", "Industrial Age", "Bronze Age", "Iron Age", "Medieval", "Victorian", "Cold War", "Ancient Rome"]}
+        {"Đâu là một thời kỳ lịch sử?",
+         ["Phục Hưng", "Khai Sáng", "Công Nghiệp", "Đồ Đồng", "Đồ Sắt", "Trung Cổ", "Victoria", "Chiến Tranh Lạnh", "La Mã Cổ Đại"]}
 
       "sports_lite" ->
-        {"Which of these is an Olympic sport?",
-         ["Archery", "Fencing", "Judo", "Rowing", "Diving", "Boxing", "Cycling", "Swimming", "Athletics"]}
+        {"Đâu là một môn thể thao Olympic?",
+         ["Bắn cung", "Đấu kiếm", "Judo", "Chèo thuyền", "Nhảy cầu", "Boxing", "Đua xe đạp", "Bơi lội", "Điền kinh"]}
 
       "food_culture" ->
-        {"Which is a fermented food?",
-         ["Kimchi", "Sauerkraut", "Yogurt", "Miso", "Tempeh", "Kefir", "Pickles", "Natto", "Kombucha"]}
+        {"Đâu là thực phẩm lên men?",
+         ["Kimchi", "Dưa cải bắp", "Sữa chua", "Miso", "Tempeh", "Kefir", "Dưa muối", "Natto", "Kombucha"]}
 
       "pop_culture" ->
-        {"Which is a film genre?",
-         ["Science Fiction", "Horror", "Comedy", "Drama", "Romance", "Thriller", "Documentary", "Animation", "Western"]}
+        {"Đâu là một thể loại phim?",
+         ["Khoa học viễn tưởng", "Kinh dị", "Hài", "Chính kịch", "Lãng mạn", "Giật gân", "Tài liệu", "Hoạt hình", "Miền Tây"]}
 
       "science_lite" ->
-        {"Which is a planet in our solar system?",
-         ["Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune", "Pluto (dwarf)"]}
+        {"Đâu là hành tinh trong hệ mặt trời?",
+         ["Sao Thủy", "Sao Kim", "Trái Đất", "Sao Hỏa", "Sao Mộc", "Sao Thổ", "Sao Thiên Vương", "Sao Hải Vương", "Sao Diêm Vương (lùn)"]}
 
       "social_stats" ->
-        {"Which is a common social network?",
+        {"Đâu là mạng xã hội phổ biến?",
          ["Instagram", "Facebook", "TikTok", "YouTube", "LinkedIn", "Snapchat", "Twitter/X", "Reddit", "Pinterest"]}
 
       "weird_facts" ->
-        {"Which animal can regenerate lost limbs?",
-         ["Starfish", "Salamander", "Planaria", "Crab", "Lizard tail", "Sea cucumber", "Sponge", "Hydra", "Axolotl"]}
+        {"Động vật nào có thể tái tạo chi bị mất?",
+         ["Sao biển", "Kỳ nhông", "Giun dẹp", "Cua", "Đuôi thằn lằn", "Hải sâm", "Bọt biển", "Thủy tức", "Axolotl"]}
 
       _ ->
-        {"Which answer is most likely correct?",
-         ["Option A", "Option B", "Option C", "Option D", "Option E", "Option F", "Option G", "Option H", "Option I"]}
+        {"Đáp án nào đúng nhất?",
+         ["Đáp án A", "Đáp án B", "Đáp án C", "Đáp án D", "Đáp án E", "Đáp án F", "Đáp án G", "Đáp án H", "Đáp án I"]}
     end
   end
 

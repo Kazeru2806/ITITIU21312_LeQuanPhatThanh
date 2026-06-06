@@ -104,9 +104,9 @@ export function ResultsPage() {
 
           {winner && (
             <div className="text-center mb-10">
-              <HostTitle>Champion</HostTitle>
+              <HostTitle>Nhà Vô Địch</HostTitle>
               <p className="text-4xl font-black text-purple-600 mt-2">{winner.nickname}</p>
-              <p className="text-xl text-gray-600 mt-1">{winner.score} points</p>
+              <p className="text-xl text-gray-600 mt-1">{winner.score} điểm</p>
             </div>
           )}
 
@@ -114,7 +114,7 @@ export function ResultsPage() {
             className="text-3xl font-black text-center mb-6"
             style={{ fontFamily: "'Bangers', cursive", color: '#FF9E3D' }}
           >
-            Final leaderboard
+            Bảng Xếp Hạng Cuối
           </h2>
 
           <div className="space-y-3 mb-10">
@@ -138,7 +138,7 @@ export function ResultsPage() {
 
           {audit.length > 0 && (
             <div className="mb-10 rounded-2xl border-2 border-purple-200 bg-purple-50/50 p-6">
-              <h3 className="text-xl font-black text-purple-700 mb-3">Blockchain audit trail</h3>
+              <h3 className="text-xl font-black text-purple-700 mb-3">Lịch sử kiểm tra blockchain</h3>
               <div className="space-y-2 max-h-48 overflow-auto text-sm">
                 {audit.slice(-8).reverse().map((a) => (
                   <div key={`${a.seq}-${a.chain_hash}`} className="bg-white rounded-lg p-2 border border-purple-100">
@@ -155,7 +155,7 @@ export function ResultsPage() {
               className="px-10 py-6 text-xl font-bold text-white border-[3px] border-[#2D1B3D] rounded-2xl"
               style={{ background: 'linear-gradient(135deg, #FF6B9D 0%, #9D4EDD 100%)' }}
             >
-              Create new room
+              Tạo phòng mới
             </Button>
           </div>
         </div>

@@ -171,7 +171,7 @@ export function LobbyPage() {
                 typeof err === 'object' && err !== null
                     ? (err as any).reason || (err as any).message
                     : null;
-            setStartError(reason || (err instanceof Error ? err.message : 'Could not start the game'));
+            setStartError(reason || (err instanceof Error ? err.message : 'Không thể bắt đầu trò chơi'));
         }
     };
 
@@ -216,7 +216,7 @@ export function LobbyPage() {
     if (!storeHydrated) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6">
-                <p className="text-purple-800 font-bold text-lg">Restoring session…</p>
+                <p className="text-purple-800 font-bold text-lg">Đang khôi phục phiên…</p>
             </div>
         );
     }
@@ -225,13 +225,13 @@ export function LobbyPage() {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-purple-50 to-pink-50 p-6 gap-4">
                 <PhoThePhoenix className="w-24 h-28" />
-                <p className="text-purple-800 font-bold text-lg">Loading lobby…</p>
+                <p className="text-purple-800 font-bold text-lg">Đang tải phòng chờ…</p>
                 <button
                     type="button"
                     onClick={() => navigate('/')}
                     className="px-6 py-3 rounded-xl bg-purple-600 text-white font-bold"
                 >
-                    Back to join screen
+                    Quay lại màn hình chính
                 </button>
             </div>
         );
@@ -308,12 +308,12 @@ export function LobbyPage() {
                             textShadow: "4px 4px 0px #FF6B9D, 8px 8px 0px #FF9E3D",
                             letterSpacing: "0.05em"
                         }}>
-                            Waiting room
+                            Phòng chờ
                         </h1>
 
                         {/* Room Code */}
                         <div className="inline-flex items-center gap-4 bg-gradient-to-r from-purple-100 to-pink-100 px-8 py-4 rounded-2xl border-2 border-purple-200 shadow-lg mb-4">
-                            <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">Room code:</span>
+                            <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">Mã phòng:</span>
                             <span className="text-4xl font-black tracking-widest" style={{
                                 color: "#9D4EDD",
                                 textShadow: "2px 2px 0px #FF6B9D"
@@ -325,12 +325,12 @@ export function LobbyPage() {
                                 className="ml-2 px-4 py-2 bg-white hover:bg-purple-50 rounded-xl transition-all transform hover:scale-110 border-2 border-purple-200 font-bold text-purple-600"
                                 title="Copy room code"
                             >
-                                {copied ? 'Copied!' : 'Copy'}
+                                {copied ? 'Đã sao chép!' : 'Sao chép'}
                             </button>
                         </div>
 
                     {copied && (
-                        <p className="text-sm text-green-600 mt-3 font-semibold">Room code copied to clipboard.</p>
+                        <p className="text-sm text-green-600 mt-3 font-semibold">Đã sao chép mã phòng.</p>
                     )}
                 </div>
 
@@ -338,7 +338,7 @@ export function LobbyPage() {
                 <div className="mb-6 flex items-center justify-center gap-3">
                     <div className={`w-4 h-4 rounded-full ${connected ? 'bg-green-500 animate-pulse vietnamese-glow' : 'bg-red-500'}`} />
                     <span className={`text-sm font-semibold ${connected ? 'text-green-600' : 'text-red-600'}`}>
-                        {connected ? 'Connected' : 'Connecting…'}
+                        {connected ? 'Đã kết nối' : 'Đang kết nối…'}
                     </span>
                 </div>
 
@@ -348,7 +348,7 @@ export function LobbyPage() {
                         onClick={handleReturnMain}
                         className="px-5 py-2 rounded-xl border-2 border-purple-200 bg-white text-purple-700 font-bold hover:bg-purple-50"
                     >
-                        Return to main screen
+                        Quay lại màn hình chính
                     </button>
                 </div>
 
@@ -371,7 +371,7 @@ export function LobbyPage() {
                             color: "#FF9E3D",
                             textShadow: "3px 3px 0px #FF6B9D"
                         }}>
-                            Players ({players.filter((p) => p.connected).length}/{players.length} online)
+                            Người chơi ({players.filter((p) => p.connected).length}/{players.length} trực tuyến)
                         </h2>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -396,15 +396,15 @@ export function LobbyPage() {
                                         <p className="font-bold text-lg lg:text-xl text-gray-800">
                                             {player.nickname}
                                             {player.id === playerId && (
-                                                <span className="ml-2 text-sm lg:text-base font-semibold text-purple-600">(You)</span>
+                                                <span className="ml-2 text-sm lg:text-base font-semibold text-purple-600">(Bạn)</span>
                                             )}
                                         </p>
                                         <div className="flex gap-2 flex-wrap">
                                             {player.is_host && (
-                                                <p className="text-xs lg:text-sm font-semibold text-orange-600 uppercase tracking-wide">Host</p>
+                                                <p className="text-xs lg:text-sm font-semibold text-orange-600 uppercase tracking-wide">Chủ phòng</p>
                                             )}
                                             <p className={`text-xs lg:text-sm font-semibold uppercase ${player.connected ? 'text-green-600' : 'text-gray-500'}`}>
-                                                {player.connected ? 'Online' : 'Absent'}
+                                                {player.connected ? 'Trực tuyến' : 'Vắng mặt'}
                                             </p>
                                         </div>
                                     </div>
@@ -434,8 +434,8 @@ export function LobbyPage() {
                             }}
                         >
                             {players.length < 2
-                                ? `Need at least 2 players (${players.length}/2)`
-                                : 'Start game'}
+                                ? `Cần ít nhất 2 người chơi (${players.length}/2)`
+                                : 'Bắt đầu chơi'}
                         </button>
                     )}
 
@@ -443,14 +443,14 @@ export function LobbyPage() {
                     {!isHost && (
                         <div className="text-center py-5 px-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border-2 border-purple-200">
                             <p className="text-gray-700 font-bold text-lg">
-                                Waiting for the host to start the game…
+                                Đang chờ chủ phòng bắt đầu trò chơi…
                             </p>
                         </div>
                     )}
 
                     {/* Info */}
                     <div className="mt-6 text-center">
-                        <p className="text-gray-600 font-medium">Share the room code with friends so they can join.</p>
+                        <p className="text-gray-600 font-medium">Chia sẻ mã phòng cho bạn bè để họ tham gia.</p>
                     </div>
                 </div>
             </div>

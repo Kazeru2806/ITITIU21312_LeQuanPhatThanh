@@ -18,12 +18,20 @@ interface TruthDistortionPanelProps {
   readyProgress: { acked: number; total: number } | null;
   doneLabel: string;
   doneLabelWithPower?: string;
+  usedPowers?: Record<string, number>;
   onToggleDistortion: (action: DistortionAction) => void;
   onSetDistortionTarget: (id: string) => void;
   onSetFakeOptionText: (text: string) => void;
   onConfirmFakeLock: () => void;
   onDone: () => void;
 }
+
+const POWER_LIMITS: Record<string, number> = {
+  remove_option: 1,
+  swap_category: 2,
+  force_blind: 1,
+  inject_fake_option: 1,
+};
 
 export function TruthDistortionPanel({
   myCharges,
@@ -40,18 +48,52 @@ export function TruthDistortionPanel({
   readySubmitting = false,
   readyProgress,
   doneLabel,
-  doneLabelWithPower = 'Confirm power & ready',
+  doneLabelWithPower = 'Xác nhận sức mạnh & sẵn sàng',
+  usedPowers = {},
   onToggleDistortion,
   onSetDistortionTarget,
   onSetFakeOptionText,
   onConfirmFakeLock,
   onDone,
 }: TruthDistortionPanelProps) {
+  const isUsed = (action: string) => (usedPowers[action] ?? 0) >= (POWER_LIMITS[action] ?? 1);
+
+  const renderPowerButton = (
+    action: DistortionAction,
+    label: string,
+    cost: number,
+  ) => {
+    const used = isUsed(action);
+    const disabled = used || myCharges < cost || distortionLocked;
+    return (
+      <button
+        type="button"
+        onClick={() => !used && onToggleDistortion(action)}
+        disabled={disabled}
+        className={`py-3 rounded-xl border-2 font-bold transition-all relative ${
+          used
+            ? 'opacity-40 cursor-not-allowed bg-gray-100 border-gray-300 text-gray-500'
+            : disabled
+              ? 'opacity-50'
+              : pendingDistortion === action
+                ? 'bg-purple-600 text-white border-purple-600'
+                : ''
+        }`}
+      >
+        {used ? (
+          <span className="text-xs">✅ Đã sử dụng</span>
+        ) : (
+          `${label} (${cost})`
+        )}
+      </button>
+    );
+  };
+
   return (
     <div className="mt-8 p-6 rounded-xl border-2 border-purple-200 bg-white">
       <div className="flex items-center justify-between mb-4">
-        <p className="text-xl font-black text-purple-700">Distortion Power</p>
-        <p className="text-xl font-black text-pink-700">{myCharges} charges</p>
+        <p className="text-xl font-black text-purple-700">Sức Mạnh Bóp Méo</p>
+        <p className="text-xl font-black text-pink-700">{myCharges} điểm năng lượng</p>
       </div>
       {distortionToast && (
         <div className="mb-4 p-3 rounded-lg border border-purple-200 bg-purple-50 text-purple-800 font-semibold">
@@ -59,53 +101,17 @@ export function TruthDistortionPanel({
         </div>
       )}
       <div className="grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          onClick={() => onToggleDistortion('remove_option')}
-          disabled={myCharges < 2 || distortionLocked}
-          className={`py-3 rounded-xl border-2 font-bold disabled:opacity-50 ${
-            pendingDistortion === 'remove_option' ? 'bg-purple-600 text-white border-purple-600' : ''
-          }`}
-        >
-          Remove option (2)
-        </button>
-        <button
-          type="button"
-          onClick={() => onToggleDistortion('swap_category')}
-          disabled={myCharges < 2 || distortionLocked}
-          className={`py-3 rounded-xl border-2 font-bold disabled:opacity-50 ${
-            pendingDistortion === 'swap_category' ? 'bg-purple-600 text-white border-purple-600' : ''
-          }`}
-        >
-          Swap category (2)
-        </button>
-        <button
-          type="button"
-          onClick={() => onToggleDistortion('force_blind')}
-          disabled={myCharges < 3 || distortionLocked}
-          className={`py-3 rounded-xl border-2 font-bold disabled:opacity-50 ${
-            pendingDistortion === 'force_blind' ? 'bg-purple-600 text-white border-purple-600' : ''
-          }`}
-        >
-          Shuffle answers (3)
-        </button>
-        <button
-          type="button"
-          onClick={() => onToggleDistortion('inject_fake_option')}
-          disabled={myCharges < 4 || distortionLocked}
-          className={`py-3 rounded-xl border-2 font-bold disabled:opacity-50 ${
-            pendingDistortion === 'inject_fake_option' ? 'bg-purple-600 text-white border-purple-600' : ''
-          }`}
-        >
-          Inject fake option (4)
-        </button>
+        {renderPowerButton('remove_option', 'Xóa đáp án', 2)}
+        {renderPowerButton('swap_category', 'Đổi chủ đề', 2)}
+        {renderPowerButton('force_blind', 'Xáo trộn', 3)}
+        {renderPowerButton('inject_fake_option', 'Chèn đáp án giả', 4)}
       </div>
 
       {pendingDistortion === 'force_blind' && (
         <div className="mt-4 p-3 rounded-xl border border-purple-200 bg-purple-50/70">
-          <p className="text-sm font-bold text-purple-800 mb-1">Shuffle target (optional)</p>
+          <p className="text-sm font-bold text-purple-800 mb-1">Mục tiêu xáo trộn (tùy chọn)</p>
           <p className="text-xs text-purple-700 mb-2">
-            Leave blank to shuffle everyone else&apos;s answers. Or pick one player.
+            Để trống để xáo trộn đáp án của tất cả người chơi khác. Hoặc chọn một người chơi.
           </p>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -117,7 +123,7 @@ export function TruthDistortionPanel({
                   : 'bg-white text-purple-800 border-purple-200'
               }`}
             >
-              Everyone else
+              Tất cả người khác
             </button>
             {players
               .slice()
@@ -142,7 +148,7 @@ export function TruthDistortionPanel({
 
       {pendingDistortion === 'remove_option' && (
         <div className="mt-4 p-3 rounded-xl border border-purple-200 bg-purple-50/70">
-          <p className="text-sm font-bold text-purple-800 mb-2">Choose target player (required)</p>
+          <p className="text-sm font-bold text-purple-800 mb-2">Chọn người chơi mục tiêu (bắt buộc)</p>
           <div className="grid grid-cols-2 gap-2">
             {players
               .slice()
@@ -167,33 +173,34 @@ export function TruthDistortionPanel({
 
       {pendingDistortion === 'inject_fake_option' && (
         <div className="mt-4 p-3 rounded-xl border border-purple-200 bg-purple-50/70">
+          <p className="text-sm font-bold text-purple-800 mb-2">Viết đáp án giả</p>
           {!fakeLockConfirmed ? (
-            <div className="space-y-3">
-              <p className="text-sm text-purple-800 font-semibold">
-                Confirm lock? This reveals the next question preview.
+            <div className="text-xs text-purple-700 mb-3 space-y-1">
+              <p>
+                Nhập một đáp án sai nhưng có vẻ đúng. Nếu có người chọn đáp án giả, bạn
+                sẽ được thưởng điểm!
               </p>
               <button
                 type="button"
                 onClick={onConfirmFakeLock}
-                className="w-full rounded-xl px-4 py-3 font-black bg-gradient-to-r from-purple-600 to-pink-500 text-white"
+                className="mt-1 px-4 py-2 rounded-xl border-2 border-purple-600 bg-purple-600 text-white font-bold"
               >
-                Yes, lock it
+                Đã hiểu, tiếp tục
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div>
               {fakePreview && (
-                <div className="rounded-lg border border-purple-200 bg-white p-3">
-                  <p className="text-xs font-bold text-purple-700">Preview</p>
-                  <p className="font-black text-purple-900">{fakePreview.category_label}</p>
-                  <p className="text-sm text-gray-700">{fakePreview.text}</p>
+                <div className="mb-2 text-xs text-purple-600">
+                  <span className="font-bold">{fakePreview.category_label}</span>:{' '}
+                  {fakePreview.text}
                 </div>
               )}
               <input
                 value={fakeOptionText}
                 onChange={(e) => onSetFakeOptionText(e.target.value)}
                 maxLength={60}
-                placeholder="Fake answer (e.g. 5 or a plausible wrong answer)"
+                placeholder="Đáp án giả (VD: 5 hoặc một đáp án sai có vẻ đúng)"
                 className="w-full rounded-xl border-2 border-purple-200 px-3 py-3 font-semibold"
               />
             </div>
@@ -204,7 +211,7 @@ export function TruthDistortionPanel({
       <div className="mt-6 p-4 rounded-xl border border-purple-200 bg-purple-50/90 relative z-20">
         {readyProgress ? (
           <p className="text-center font-bold text-purple-800 mb-3">
-            Ready: {readyProgress.acked}/{readyProgress.total}
+            Sẵn sàng: {readyProgress.acked}/{readyProgress.total}
           </p>
         ) : null}
         <button
@@ -222,15 +229,15 @@ export function TruthDistortionPanel({
           }`}
         >
           {readySubmitting
-            ? 'Sending…'
+            ? 'Đang gửi…'
             : readySent
-              ? 'Waiting for other players…'
+              ? 'Đang chờ người chơi khác…'
               : pendingDistortion && !distortionLocked
                 ? doneLabelWithPower
                 : doneLabel}
         </button>
         <p className="text-xs text-gray-600 mt-2 text-center">
-          Tap Done anytime. If you picked a power, Done confirms it and marks you ready. Everyone ready skips the wait.
+          Nhấn Xong bất cứ lúc nào. Nếu bạn đã chọn sức mạnh, Xong sẽ xác nhận và đánh dấu bạn sẵn sàng.
         </p>
       </div>
     </div>

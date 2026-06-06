@@ -147,7 +147,8 @@ defmodule VnParty.TruthDistortionUse do
       |> Game.list_players()
       |> Enum.map(fn p ->
         s = get_truth_stats(p.id)
-        %{player_id: p.id, tp: s.tp, di: s.di, ps: s.ps, charges: s.charges}
+        used = get_player_used_powers(room.id, p.id)
+        %{player_id: p.id, tp: s.tp, di: s.di, ps: s.ps, charges: s.charges, used_powers: used}
       end)
 
     Endpoint.broadcast("game:#{room.code}", "truth_stats_updated", %{stats: stats_public})
@@ -187,6 +188,16 @@ defmodule VnParty.TruthDistortionUse do
         :ets.insert(:truth_player_stats, {player_id, defaults})
         defaults
     end
+  end
+
+  defp get_player_used_powers(room_id, player_id) do
+    powers = ~w(remove_option swap_category force_blind inject_fake_option merge_realities)
+    Enum.into(powers, %{}, fn action ->
+      case :ets.lookup(:distortion_usage, {room_id, player_id, action}) do
+        [{_, n}] -> {action, n}
+        _ -> {action, 0}
+      end
+    end)
   end
 
   defp update_truth_stats(player_id, fun) do

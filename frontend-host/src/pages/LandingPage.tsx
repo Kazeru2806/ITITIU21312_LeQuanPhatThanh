@@ -30,7 +30,7 @@ export function LandingPage() {
       setRoomCode(roomResponse.room.code);
       navigate('/lobby');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create room');
+      setError(err instanceof Error ? err.message : 'Không thể tạo phòng');
     } finally {
       setLoading(false);
     }
@@ -49,7 +49,7 @@ export function LandingPage() {
             textShadow: '3px 3px 0px #FF6B9D',
           }}
         >
-          Host Command Center
+          Trung Tâm Điều Khiển
         </p>
 
         <div className="mb-8">
@@ -57,7 +57,7 @@ export function LandingPage() {
         </div>
 
         <HostSubtitle>
-          Create a room, share the code, and run the game on the big screen.
+          Tạo phòng, chia sẻ mã và điều khiển trò chơi trên màn hình lớn.
         </HostSubtitle>
 
         <Card
@@ -71,7 +71,7 @@ export function LandingPage() {
           )}
 
           <p className="text-sm font-bold text-gray-700 mb-3 text-center uppercase tracking-wider">
-            Game mode
+            Chế độ chơi
           </p>
           <div className="grid grid-cols-2 gap-3 mb-8">
             <button
@@ -84,7 +84,7 @@ export function LandingPage() {
                   : 'border-gray-200 bg-white text-gray-600 hover:border-purple-300'
               }`}
             >
-              Classic Trivia
+              Trắc Nghiệm Kinh Điển
             </button>
             <button
               type="button"
@@ -96,7 +96,7 @@ export function LandingPage() {
                   : 'border-gray-200 bg-white text-gray-600 hover:border-pink-300'
               }`}
             >
-              Truth Collapse
+              Sụp Đổ Sự Thật
             </button>
           </div>
 
@@ -111,11 +111,11 @@ export function LandingPage() {
                 : 'linear-gradient(135deg, #FF6B9D 0%, #9D4EDD 100%)',
             }}
           >
-            {loading ? 'Creating room…' : `Create room (${mode === 'truth_collapse' ? 'Truth Collapse' : 'Classic'})`}
+            {loading ? 'Đang tạo phòng…' : `Tạo phòng (${mode === 'truth_collapse' ? 'Sụp Đổ Sự Thật' : 'Kinh Điển'})`}
           </Button>
 
           <p className="text-center text-gray-500 mt-6 text-sm">
-            Open player app at the same server, enter the room code to join.
+            Mở ứng dụng người chơi trên cùng máy chủ, nhập mã phòng để tham gia.
           </p>
           {import.meta.env.DEV && (
             <p className="text-center text-xs text-gray-400 mt-2 break-all">

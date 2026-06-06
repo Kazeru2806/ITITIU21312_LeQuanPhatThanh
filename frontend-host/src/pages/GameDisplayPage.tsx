@@ -382,7 +382,7 @@ export function GameDisplayPage() {
       setForceEndStep('confirm');
       setForceEndCode('');
     } catch (e) {
-      setForceEndError(e instanceof Error ? e.message : 'Could not start end-game flow');
+      setForceEndError(e instanceof Error ? e.message : 'Không thể bắt đầu kết thúc trò chơi');
     }
   };
 
@@ -392,12 +392,12 @@ export function GameDisplayPage() {
       await confirmForceEnd(forceEndCode.trim().toUpperCase());
       setForceEndStep('idle');
     } catch (e) {
-      setForceEndError(e instanceof Error ? e.message : 'Confirmation failed');
+      setForceEndError(e instanceof Error ? e.message : 'Xác nhận thất bại');
     }
   };
 
   const getPlayerName = (playerId: string) => {
-    return players.find(p => p.id === playerId)?.nickname || 'Unknown';
+    return players.find(p => p.id === playerId)?.nickname || 'Không rõ';
   };
 
   const getOptionText = (optionId: string) => {
@@ -416,15 +416,15 @@ export function GameDisplayPage() {
     <div className="min-h-screen text-[#2D1B3D] p-4 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-5 rounded-2xl border-2 border-purple-300 bg-white/90 backdrop-blur px-5 py-4 shadow-lg">
-          <HostTitle>Live Game</HostTitle>
-          <p className="text-sm text-[#7D5A8A] text-center font-medium">Room {roomCode} · Round {currentRound}/{totalRounds}</p>
+          <HostTitle>Trò Chơi Trực Tiếp</HostTitle>
+          <p className="text-sm text-[#7D5A8A] text-center font-medium">Phòng {roomCode} · Vòng {currentRound}/{totalRounds}</p>
           <div className="flex flex-wrap justify-center gap-3 mt-4">
             <button
               type="button"
               onClick={handleReturnHome}
               className="px-4 py-2 rounded-xl border-2 border-gray-300 font-bold text-gray-700 hover:bg-gray-50"
             >
-              Return to main screen
+              Quay lại màn hình chính
             </button>
             {forceEndStep === 'idle' ? (
               <button
@@ -432,7 +432,7 @@ export function GameDisplayPage() {
                 onClick={handleRequestForceEnd}
                 className="px-4 py-2 rounded-xl border-2 border-red-300 font-bold text-red-700 hover:bg-red-50"
               >
-                End game early…
+                Kết thúc trò chơi sớm…
               </button>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
@@ -448,10 +448,10 @@ export function GameDisplayPage() {
                   onClick={handleConfirmForceEnd}
                   className="px-3 py-2 rounded-lg bg-red-600 text-white font-bold"
                 >
-                  Confirm
+                  Xác nhận
                 </button>
                 <button type="button" onClick={() => setForceEndStep('idle')} className="text-gray-600 font-semibold">
-                  Cancel
+                  Hủy
                 </button>
               </div>
             )}
@@ -460,7 +460,7 @@ export function GameDisplayPage() {
         </div>
         <div className="flex justify-between items-center mb-6 gap-4">
           <div className="bg-white px-8 py-4 rounded-full text-purple-700 font-black text-2xl shadow-lg border-2 border-purple-300">
-            Round {currentRound}/{totalRounds}
+            Vòng {currentRound}/{totalRounds}
           </div>
           <div className="bg-white px-8 py-4 rounded-full text-pink-600 font-black text-xl shadow-lg border-2 border-pink-300">
             {roomCode}
@@ -471,46 +471,46 @@ export function GameDisplayPage() {
         {isTruth ? (
           phase === 'transition' ? (
             <div className="bg-white rounded-3xl shadow-2xl p-16 text-center border-4 border-purple-300">
-              <h2 className="text-5xl font-black mb-4 text-purple-700">Next round</h2>
-              <p className="text-2xl text-gray-600">Syncing with the room…</p>
+              <h2 className="text-5xl font-black mb-4 text-purple-700">Vòng tiếp theo</h2>
+              <p className="text-2xl text-gray-600">Đang đồng bộ với phòng…</p>
             </div>
           ) : phase === 'discussion' ? (
             <div className="bg-white rounded-3xl shadow-2xl p-16 text-center border-4 border-pink-300">
-              <h2 className="text-5xl font-black mb-4 text-pink-700">Discussion (before answering)</h2>
+              <h2 className="text-5xl font-black mb-4 text-pink-700">Thảo luận (trước khi trả lời)</h2>
               <div className="flex justify-center mb-6">
                 <div className="w-28 h-28 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center text-5xl font-black text-white border-4 border-green-300 shadow-lg">
                   {discussionLeft}
                 </div>
               </div>
               <p className="text-2xl text-gray-600 mb-4">
-                Discussion ends in <span className="text-pink-700 font-black">{discussionLeft}s</span>
+                Thảo luận kết thúc trong <span className="text-pink-700 font-black">{discussionLeft}s</span>
               </p>
               <p className="text-lg text-gray-500 mb-10 max-w-2xl mx-auto">
-                The full question is hidden until the answer phase—use this time to talk, bluff, and lock in a prediction on your phone.
+                Câu hỏi sẽ ẩn cho đến giai đoạn trả lời—dùng thời gian này để nói chuyện, lừa đối và khóa dự đoán trên điện thoại.
               </p>
 
               {truthDiscussionMeta?.categoryLabel ? (
                 <div className="mb-10 max-w-3xl mx-auto text-left bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6 border-2 border-purple-200">
-                  <p className="text-sm font-black text-purple-600 uppercase tracking-widest mb-1">Round theme</p>
+                  <p className="text-sm font-black text-purple-600 uppercase tracking-widest mb-1">Chủ đề vòng</p>
                   <p className="text-4xl font-black text-pink-700">{truthDiscussionMeta.categoryLabel}</p>
                   {truthDiscussionMeta.timelineLabels && truthDiscussionMeta.timelineLabels.length > 1 ? (
                     <p className="text-lg text-gray-700 mt-3">
-                      <span className="font-bold text-purple-700">After distortions: </span>
+                      <span className="font-bold text-purple-700">Sau biến dạng: </span>
                       {truthDiscussionMeta.timelineLabels.join(' → ')}
                     </p>
                   ) : null}
                   <p className="text-sm text-gray-600 mt-2">
-                    Category stays the same each round until someone uses Swap Category.
+                    Thể loại giữ nguyên mỗi vòng cho đến khi có người dùng Đổi Thể Loại.
                   </p>
                 </div>
               ) : (
                 <div className="mb-10 max-w-xl mx-auto rounded-2xl p-6 border-2 border-dashed border-purple-200 text-gray-500">
-                  Loading theme…
+                  Đang tải chủ đề…
                 </div>
               )}
 
               <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6 border-4 border-purple-300 inline-block">
-                <p className="text-2xl font-black text-purple-700 mb-4">Live counts (if any)</p>
+                <p className="text-2xl font-black text-purple-700 mb-4">Số lượng chọn (nếu có)</p>
                 <div className="grid grid-cols-4 gap-4">
                   {['A', 'B', 'C', 'D'].map((opt) => (
                     <div key={opt} className="bg-white rounded-xl p-4 border-2 border-purple-200">
@@ -525,7 +525,7 @@ export function GameDisplayPage() {
           ) : phase === 'results' && roundScores ? (
             <div className="bg-white rounded-3xl shadow-2xl p-12 border-4 border-purple-300">
               <h2 className="text-5xl font-black text-center mb-6 text-purple-600">
-                Round {currentRound} Results
+                Kết quả Vòng {currentRound}
               </h2>
 
               <div className="flex justify-center mb-6">
@@ -534,26 +534,26 @@ export function GameDisplayPage() {
                 </div>
               </div>
               <p className="text-center text-xl font-bold text-purple-800 mb-2">
-                Power phase — next round in {resultsLeft}s
+                Giai đoạn sức mạnh — vòng tiếp theo trong {resultsLeft}s
               </p>
               {truthReadyProgress && truthReadyProgress.total > 0 ? (
                 <p className="text-center text-lg font-bold text-purple-700 mb-6">
-                  Players ready: {truthReadyProgress.acked}/{truthReadyProgress.total}
+                  Người chơi sẵn sàng: {truthReadyProgress.acked}/{truthReadyProgress.total}
                 </p>
               ) : null}
 
               <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6 border-4 border-purple-300">
-                  <p className="text-2xl font-black text-purple-700 mb-2">True reality</p>
+                  <p className="text-2xl font-black text-purple-700 mb-2">Thực tế đúng</p>
                   <p className="text-4xl font-black text-pink-700">
                     {truthMeta?.true_reality ?? '??'}
                   </p>
                   <p className="text-lg text-gray-600 mt-2">
-                    {truthMeta?.stable_round ? 'Stable round (no distortions generated)' : 'Distortions generated'}
-                    {truthMeta?.merged_realities ? ' | Realities merged early' : ''}
+                    {truthMeta?.stable_round ? 'Vòng ổn định (không có biến dạng)' : 'Có biến dạng'}
+                    {truthMeta?.merged_realities ? ' | Thực tế đã hợp nhất sớm' : ''}
                   </p>
                   <div className="mt-4">
-                    <p className="text-2xl font-black text-purple-700 mb-3">Answer counts</p>
+                    <p className="text-2xl font-black text-purple-700 mb-3">Số lượng chọn</p>
                     <div className="grid grid-cols-4 gap-3">
                       {['A', 'B', 'C', 'D'].map((opt) => (
                         <div key={opt} className="bg-white rounded-xl p-3 border-2 border-purple-200 text-center">
@@ -566,14 +566,14 @@ export function GameDisplayPage() {
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 border-4 border-pink-200">
-                  <p className="text-2xl font-black text-purple-700 mb-3">Distortions used</p>
+                  <p className="text-2xl font-black text-purple-700 mb-3">Biến dạng đã dùng</p>
                   {distortionLog.length === 0 ? (
-                    <p className="text-gray-600 text-lg">No distortions used this round.</p>
+                    <p className="text-gray-600 text-lg">Chưa có biến dạng nào được dùng vòng này.</p>
                   ) : (
                     <div className="space-y-2">
                       {distortionLog.slice(0, 6).map((d: any, idx: number) => (
                         <div key={idx} className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-4 border-2 border-purple-200">
-                          <p className="font-bold text-gray-800">{d.nickname} used {d.action}</p>
+                          <p className="font-bold text-gray-800">{d.nickname} dùng {d.action}</p>
                         </div>
                       ))}
                     </div>
@@ -601,7 +601,7 @@ export function GameDisplayPage() {
                           <div>
                             <p className="text-2xl font-bold">{getPlayerName(row.player_id)}</p>
                             <p className="text-lg text-gray-600">
-                              Picked: <span className="font-bold">{row.answer}</span>
+                              Đã chọn: <span className="font-bold">{row.answer}</span>
                             </p>
                           </div>
                         </div>
@@ -609,7 +609,7 @@ export function GameDisplayPage() {
                           {inTrue ? (
                             <p className="text-2xl font-bold text-purple-600">+{row.tp_gain} TP</p>
                           ) : (
-                            <p className="text-2xl font-bold text-purple-600">+{row.distortion_gain ?? 1} DI (charge: {row.charges ?? '??'})</p>
+                            <p className="text-2xl font-bold text-purple-600">+{row.distortion_gain ?? 1} DI (năng lượng: {row.charges ?? '??'})</p>
                           )}
                         </div>
                       </div>
@@ -620,7 +620,7 @@ export function GameDisplayPage() {
 
               {/* Leaderboard */}
               <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-4 border-purple-300">
-                <h3 className="text-3xl font-bold mb-4 text-center">Leaderboard (Final Collapse)</h3>
+                <h3 className="text-3xl font-bold mb-4 text-center">Bảng Xếp Hạng (Sụp Đổ)</h3>
                 <div className="space-y-2">
                   {leaderboard.map((entry: any, index) => (
                     <div key={entry.player_id} className="flex items-center justify-between p-4 bg-white rounded-lg">
@@ -632,7 +632,7 @@ export function GameDisplayPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-2xl font-bold text-purple-600">
-                          {entry.final_score ?? entry.score} pts
+                          {entry.final_score ?? entry.score} điểm
                         </p>
                         <p className="text-sm text-gray-600">
                           TP {entry.tp ?? 0} | DI {entry.di ?? 0} | PS {entry.ps ?? 0}
@@ -645,21 +645,21 @@ export function GameDisplayPage() {
             </div>
           ) : !currentQuestion ? (
             <div className="bg-white rounded-3xl shadow-2xl p-16 text-center border-4 border-pink-300">
-              <p className="text-3xl font-black text-purple-700">Loading question…</p>
+              <p className="text-3xl font-black text-purple-700">Đang tải câu hỏi…</p>
             </div>
           ) : (
             // Truth Collapse question view
             <div className="bg-white rounded-3xl shadow-2xl p-12 border-4 border-pink-300">
               <div className="flex justify-between items-start mb-6">
               <div className="bg-white px-6 py-3 rounded-full border-4 border-purple-200">
-                  <p className="text-2xl font-black text-purple-700">Round {currentRound}/{totalRounds}</p>
-                  <p className="text-sm text-gray-600 mt-1">Realities will split after answers lock</p>
+                  <p className="text-2xl font-black text-purple-700">Vòng {currentRound}/{totalRounds}</p>
+                  <p className="text-sm text-gray-600 mt-1">Thực tế sẽ tách sau khi khóa câu trả lời</p>
                 </div>
                 {((currentQuestion as any)?.shuffle_targets?.length > 0 ||
                   (currentQuestion as any)?.blind_targets?.length > 0) && (
                   <div className="bg-red-50 border-4 border-red-200 px-6 py-3 rounded-full">
-                    <p className="text-xl font-black text-red-700">Answer shuffle active</p>
-                    <p className="text-sm text-red-800 mt-1">Some phones will scramble option order</p>
+                    <p className="text-xl font-black text-red-700">Xoá trận đáp án đang hoạt động</p>
+                    <p className="text-sm text-red-800 mt-1">Một số điện thoại sẽ xáo trộn thứ tự đáp án</p>
                   </div>
                 )}
               </div>
@@ -703,16 +703,16 @@ export function GameDisplayPage() {
                 </div>
 
                 <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-6 border-4 border-purple-300">
-                  <p className="text-2xl font-black text-purple-700 mb-4">Distortions this round</p>
+                  <p className="text-2xl font-black text-purple-700 mb-4">Biến dạng vòng này</p>
                   {distortionLog.length === 0 ? (
-                    <p className="text-gray-600 text-lg">No distortions used yet.</p>
+                    <p className="text-gray-600 text-lg">Chưa có biến dạng nào.</p>
                   ) : (
                     <div className="space-y-2">
                       {distortionLog.slice(0, 6).map((d: any, idx: number) => (
                         <div key={idx} className="bg-white rounded-xl p-4 border-2 border-purple-200">
                           <p className="font-bold text-gray-800">{d.nickname}</p>
-                          <p className="text-gray-600">used {d.action}</p>
-                          <p className="text-sm text-gray-600">{d.remaining_charges ?? '??'} charges left</p>
+                          <p className="text-gray-600">dùng {d.action}</p>
+                          <p className="text-sm text-gray-600">{d.remaining_charges ?? '??'} năng lượng còn lại</p>
                         </div>
                       ))}
                     </div>
@@ -723,7 +723,7 @@ export function GameDisplayPage() {
               {/* Player Status */}
               <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-4 border-purple-300">
                 <h3 className="text-2xl font-bold mb-4 text-center">
-                  Players ({committedPlayers.size}/{players.length})
+                  Người chơi ({committedPlayers.size}/{players.length})
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {players.map((player) => (
@@ -737,7 +737,7 @@ export function GameDisplayPage() {
                     >
                       <p className="font-semibold">{player.nickname}</p>
                       <p className="text-sm">
-                      {committedPlayers.has(player.id) ? '✓ Answered' : 'Waiting...'}
+                      {committedPlayers.has(player.id) ? '✓ Đã trả lời' : 'Đang chờ...'}
                       </p>
                     </div>
                   ))}
@@ -750,17 +750,17 @@ export function GameDisplayPage() {
           <>
             {!currentQuestion ? (
               <div className="bg-white rounded-3xl shadow-2xl p-16 text-center">
-                <h2 className="text-5xl font-black mb-4 text-purple-600">Preparing next question...</h2>
-                <p className="text-2xl text-gray-600">Please wait...</p>
+                <h2 className="text-5xl font-black mb-4 text-purple-600">Đang chuẩn bị câu hỏi...</h2>
+                <p className="text-2xl text-gray-600">Vui lòng chờ...</p>
               </div>
             ) : roundScores ? (
               /* Round Results */
               <div className="bg-white rounded-3xl shadow-2xl p-12">
-                <h2 className="text-5xl font-black text-center mb-8 text-purple-600">Round {currentRound} Results</h2>
+                <h2 className="text-5xl font-black text-center mb-8 text-purple-600">Kết quả Vòng {currentRound}</h2>
                 
                 <div className="mb-8">
                   <p className="text-3xl font-bold text-center mb-4">
-                    Correct answer: <span className="text-green-600">{currentQuestion.correct as any}</span>
+                    Đáp án đúng: <span className="text-green-600">{currentQuestion.correct as any}</span>
                   </p>
                   <p className="text-xl text-center text-gray-600 mb-8">
                     {getOptionText(currentQuestion.correct as any)}
@@ -787,12 +787,12 @@ export function GameDisplayPage() {
                           <div>
                             <p className="text-2xl font-bold">{getPlayerName(score.player_id)}</p>
                             <p className="text-lg text-gray-600">
-                              Picked: {score.answer} - {getOptionText(score.answer)}
+                              Đã chọn: {score.answer} - {getOptionText(score.answer)}
                             </p>
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="text-2xl font-bold text-purple-600">+{score.points} pts</p>
+                          <p className="text-2xl font-bold text-purple-600">+{score.points} điểm</p>
                         </div>
                       </div>
                     </div>
@@ -801,7 +801,7 @@ export function GameDisplayPage() {
 
                 {/* Leaderboard */}
                 <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-4 border-purple-300">
-                  <h3 className="text-3xl font-bold mb-4 text-center">Leaderboard</h3>
+                  <h3 className="text-3xl font-bold mb-4 text-center">Bảng Xếp Hạng</h3>
                   <div className="space-y-2">
                     {leaderboard.map((entry: any, index) => (
                       <div key={entry.player_id} className="flex items-center justify-between p-4 bg-white rounded-lg">
@@ -811,7 +811,7 @@ export function GameDisplayPage() {
                           </div>
                           <p className="text-xl font-semibold">{entry.nickname}</p>
                         </div>
-                        <p className="text-2xl font-bold text-purple-600">{entry.score} pts</p>
+                        <p className="text-2xl font-bold text-purple-600">{entry.score} điểm</p>
                       </div>
                     ))}
                   </div>
@@ -866,7 +866,7 @@ export function GameDisplayPage() {
                 {/* Player Status */}
                 <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-4 border-purple-300">
                   <h3 className="text-2xl font-bold mb-4 text-center">
-                    Players ({committedPlayers.size}/{players.length})
+                    Người chơi ({committedPlayers.size}/{players.length})
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {players.map((player) => (
@@ -880,7 +880,7 @@ export function GameDisplayPage() {
                       >
                         <p className="font-semibold">{player.nickname}</p>
                         <p className="text-sm">
-                      {committedPlayers.has(player.id) ? '✓ Answered' : 'Waiting...'}
+                      {committedPlayers.has(player.id) ? '✓ Đã trả lời' : 'Đang chờ...'}
                         </p>
                       </div>
                     ))}
