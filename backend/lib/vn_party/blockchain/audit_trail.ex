@@ -7,19 +7,33 @@ defmodule VnParty.Blockchain.AuditTrail do
   alias VnParty.Blockchain.EvmClient
 
   def on_event(event) do
-    Task.start(fn -> anchor_event(event) end)
+    if Application.get_env(:vn_party, :async_blockchain_anchoring, true) do
+      Task.start(fn -> anchor_event(event) end)
+    else
+      anchor_event(event)
+    end
     :ok
   end
 
   def anchor_event(%{id: event_id, room_id: room_id, seq: seq} = event) do
-    prev =
-      BlockchainAnchor
-      |> where([a], a.room_id == ^room_id)
-      |> order_by([a], desc: a.seq)
-      |> limit(1)
-      |> Repo.one()
+    prev_chain_hash =
+      case :ets.lookup(:room_chain_hash, room_id) do
+        [{^room_id, hash}] ->
+          hash
 
-    prev_chain_hash = prev && prev.chain_hash
+        [] ->
+          prev =
+            BlockchainAnchor
+            |> where([a], a.room_id == ^room_id)
+            |> order_by([a], desc: a.seq)
+            |> limit(1)
+            |> Repo.one()
+
+          hash = prev && prev.chain_hash
+          :ets.insert(:room_chain_hash, {room_id, hash})
+          hash
+      end
+
     event_hash = event_hash(event)
     chain_hash = chain_hash(prev_chain_hash, event_hash)
 
@@ -35,6 +49,8 @@ defmodule VnParty.Blockchain.AuditTrail do
              status: "pending"
            })
            |> Repo.insert(on_conflict: :nothing, conflict_target: :event_id) do
+      :ets.insert(:room_chain_hash, {room_id, chain_hash})
+
       if EvmClient.enabled?() do
         case EvmClient.anchor_hash(chain_hash) do
           {:ok, tx_hash} ->

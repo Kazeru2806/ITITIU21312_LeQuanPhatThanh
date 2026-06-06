@@ -23,6 +23,9 @@ defmodule VnParty.TruthDistortionApply do
     swap_fn = Keyword.fetch!(opts, :swap_fn)
     category_picker = Keyword.fetch!(opts, :category_picker)
     di_fn = Keyword.get(opts, :di_fn, &default_di/1)
+    resize_fn = Keyword.get(opts, :resize_fn, fn q -> q end)
+
+    question = resize_fn.(question)
 
     distortions_raw =
       :ets.lookup(:truth_distortions, room_id)
@@ -45,7 +48,7 @@ defmodule VnParty.TruthDistortionApply do
 
     ordered =
       distortions_raw
-      |> Enum.sort_by(fn d -> {-d.di, :rand.uniform(10_000)} end)
+      |> Enum.sort_by(fn d -> {action_priority(d.action), -d.di, :rand.uniform(10_000)} end)
 
     initial_category = Map.get(question, :category)
 
@@ -65,7 +68,7 @@ defmodule VnParty.TruthDistortionApply do
           "swap_category" ->
             requested = Map.get(d.payload, "category", Map.get(d.payload, :category))
             cat = category_picker.(a.q, requested)
-            new_q = swap_fn.(room_id, round, cat, :random)
+            new_q = swap_fn.(room_id, round, cat, :random) |> resize_fn.()
 
             entry = %{
               player_id: d.player_id,
@@ -215,6 +218,10 @@ defmodule VnParty.TruthDistortionApply do
       _ -> 0
     end
   end
+
+  defp action_priority("swap_category"), do: 0
+  defp action_priority("inject_fake_option"), do: 1
+  defp action_priority(_), do: 2
 
   defp truth_category_label("general"), do: "Kiến Thức Chung"
   defp truth_category_label("weird_facts"), do: "Sự Thật Kỳ Lạ"

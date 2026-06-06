@@ -543,13 +543,26 @@ end
   Gets the next sequence number for a room.
   """
   def get_next_sequence_number(room_id) do
-    case Repo.one(
-      from e in Event,
-      where: e.room_id == ^room_id,
-      select: max(e.seq)
-    ) do
-      nil -> 1
-      max_seq -> max_seq + 1
+    case :ets.lookup(:room_event_seq, room_id) do
+      [{^room_id, _seq}] ->
+        :ets.update_counter(:room_event_seq, room_id, {2, 1})
+
+      [] ->
+        db_seq =
+          case Repo.one(
+            from e in Event,
+            where: e.room_id == ^room_id,
+            select: max(e.seq)
+          ) do
+            nil -> 1
+            max_seq -> max_seq + 1
+          end
+
+        if :ets.insert_new(:room_event_seq, {room_id, db_seq}) do
+          db_seq
+        else
+          :ets.update_counter(:room_event_seq, room_id, {2, 1})
+        end
     end
   end
 

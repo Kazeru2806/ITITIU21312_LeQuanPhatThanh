@@ -24,6 +24,7 @@ defmodule VnPartyWeb.GameChannel do
           |> assign(:room_code, room.code)
           |> assign(:player_id, player_id)
           |> assign(:nickname, nickname)
+          |> assign(:room_mode, Game.room_mode(room))
 
         case Game.get_player(player_id) do
           %VnParty.Game.Player{room_id: rid} when rid == room.id ->
@@ -338,16 +339,24 @@ defmodule VnPartyWeb.GameChannel do
   @impl true
   def handle_in("submit_prediction", payload, socket) do
     %{"option_id" => option_id} = payload
-    room = Game.get_room!(socket.assigns.room_id)
-    if Game.room_mode(room) != "truth_collapse" do
+    mode = socket.assigns[:room_mode]
+
+    if mode != "truth_collapse" do
       {:reply, {:error, %{reason: "Predictions are only available in Truth Collapse"}}, socket}
     else
       maybe_record_latency(socket, "submit_prediction", payload, %{option_id: option_id})
-      key = {socket.assigns.room_id, room.current_round, socket.assigns.player_id}
+
+      current_round =
+        case :ets.lookup(:truth_room_phase, socket.assigns.room_id) do
+          [{_, %{round: r}}] -> r
+          _ -> 1
+        end
+
+      key = {socket.assigns.room_id, current_round, socket.assigns.player_id}
       :ets.insert(:truth_predictions, {key, option_id})
 
-      counts = build_prediction_counts(socket.assigns.room_id, room.current_round)
-      counts_payload = %{round: room.current_round, counts: counts}
+      counts = build_prediction_counts(socket.assigns.room_id, current_round)
+      counts_payload = %{round: current_round, counts: counts}
       Endpoint.broadcast("display:#{socket.assigns.room_code}", "display:option_counts_updated", counts_payload)
       broadcast!(socket, "option_counts_updated", counts_payload)
 
@@ -935,9 +944,9 @@ defmodule VnPartyWeb.GameChannel do
       # potentially select a different question, causing discussion/answering mismatch.
       {question, effects} =
         case :ets.lookup(:truth_round_data, {room_id, round}) do
-          [{{^room_id, ^round}, %{question: stored_q}}] ->
-            IO.puts("🔄 truth_begin_answering: reusing stored question #{stored_q.id} for round #{round}")
-            apply_distortions_for_round(room_id, round, stored_q)
+          [{{^room_id, ^round}, %{question: stored_q, effects: stored_eff}}] ->
+            IO.puts("🔄 truth_begin_answering: reusing stored question #{stored_q.id} and effects for round #{round}")
+            {stored_q, stored_eff}
 
           _ ->
             IO.puts("⚠️ truth_begin_answering: no stored question for round #{round}, generating fresh")
@@ -1272,7 +1281,7 @@ defmodule VnPartyWeb.GameChannel do
       PubSub.unsubscribe(VnParty.PubSub, "room:#{socket.assigns.room_id}:internal")
     end
 
-    if socket.assigns[:player_id] and socket.assigns[:room_code] and
+    if socket.assigns[:player_id] && socket.assigns[:room_code] &&
          should_remove_player_on_disconnect?(reason, socket) do
       room_id = socket.assigns.room_id
       player_id = socket.assigns.player_id
@@ -2309,11 +2318,17 @@ defmodule VnPartyWeb.GameChannel do
 
   defp apply_distortions_for_round(room_id, round, question) do
     player_ids = room_id |> Game.list_players() |> Enum.map(& &1.id)
+    conn = count_connected(room_id)
 
     VnParty.TruthDistortionApply.apply_for_round(room_id, round, question,
       swap_fn: &generate_truth_question_from_category/4,
       category_picker: &pick_swap_category/2,
-      connected_player_ids: player_ids
+      connected_player_ids: player_ids,
+      resize_fn: fn q ->
+        q
+        |> ensure_truth_question_option_capacity(conn + 1)
+        |> resize_truth_options_for_players(conn)
+      end
     )
   end
 

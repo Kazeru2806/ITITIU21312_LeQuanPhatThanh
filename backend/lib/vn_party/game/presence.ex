@@ -9,12 +9,22 @@ defmodule VnParty.Game.Presence do
   @doc "Player reconnected to the channel."
   def mark_connected(player_id) when is_binary(player_id) do
     :ets.delete(:player_absent, player_id)
-    Game.update_player_connection(player_id, true)
+
+    case :ets.lookup(:player_connection_cache, player_id) do
+      [{_, true}] ->
+        :ok
+
+      _ ->
+        :ets.insert(:player_connection_cache, {player_id, true})
+        Game.update_player_connection(player_id, true)
+    end
+
     player_id
   end
 
   @doc "Player left the channel (tab closed). Lobby seats are removed immediately via `Game.player_left/2`."
   def mark_disconnected(player_id) when is_binary(player_id) do
+    :ets.delete(:player_connection_cache, player_id)
     Game.update_player_connection(player_id, false)
     player_id
   end

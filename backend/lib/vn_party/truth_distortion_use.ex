@@ -230,7 +230,7 @@ defmodule VnParty.TruthDistortionUse do
     end
   end
 
-  defp validate_payload("inject_fake_option", payload, _room, _player_id) do
+  defp validate_payload("inject_fake_option", payload, room, player_id) do
     raw = Map.get(payload, "fake_text", Map.get(payload, :fake_text, ""))
     txt = sanitize_fake_text(raw)
 
@@ -245,6 +245,13 @@ defmodule VnParty.TruthDistortionUse do
         {:error, "Fake answer is too long (max 60 chars)"}
 
       contains_prohibited_text?(txt) ->
+        redacted = String.replace(txt, ~r/./, "*")
+        VnParty.Game.create_event(room.id, "profanity_attempt", %{
+          player_id: player_id,
+          action: "inject_fake_option",
+          text_redacted: redacted
+        }, player_id)
+
         {:error, "That text is not allowed by room safety filter"}
 
       true ->
@@ -291,8 +298,10 @@ defmodule VnParty.TruthDistortionUse do
 
   defp contains_prohibited_text?(txt) do
     lower = String.downcase(txt)
+    # Remove common bypass punctuation like ., *, !, @, #, $, %, ^, &, -, _ inside words
+    clean_for_regex = String.replace(lower, ~r/[.*!@#\$%\^&_\-]/, "")
 
-    banned = [
+    banned_exact = [
       "fuck",
       "fucking",
       "shit",
@@ -312,14 +321,49 @@ defmodule VnParty.TruthDistortionUse do
       "cặc",
       "lồn",
       "buồi",
-      "óc chó"
+      "óc chó",
+      "dmm",
+      "clm",
+      "clgt",
+      "vcl",
+      "đm",
+      "đmc",
+      "đmm",
+      "chó đẻ",
+      "mẹ kiếp"
     ]
 
-    has_banned = Enum.any?(banned, &String.contains?(lower, &1))
+    has_banned = Enum.any?(banned_exact, &String.contains?(clean_for_regex, &1))
     has_url = String.match?(lower, ~r/https?:\/\/|www\./)
     has_contact = String.match?(lower, ~r/\b\d{8,}\b|@/)
     has_sql = String.match?(lower, ~r/--|\/\*|\*\/|drop\s+table|select\s+\*/)
 
-    has_banned or has_url or has_contact or has_sql
+    has_regex_banned =
+      Enum.any?([
+        # English: fuck, f*ck, f_u_c_k, f.u.c.k, etc.
+        ~r/f\s*[u*v0a]\s*[c*k]\s*[k*x]/i,
+        # English: shit, sh!t, sh*t, s.h.i.t
+        ~r/s\s*[h*#]\s*[i*!1*]\s*t/i,
+        # English: dick, d1ck, d!ck
+        ~r/d\s*[i*!1*]\s*[c*k]\s*[k*x]/i,
+        # English: bitch, b!tch, b*tch
+        ~r/b\s*[i*!1*]\s*t\s*c\s*h/i,
+        # Vietnamese: địt, đ.ị.t, đ*t
+        ~r/đ\s*[ịi*]\s*t/i,
+        # Vietnamese: đụ, đ.ụ.m, đ*m
+        ~r/đ\s*[ụu*]\s*[m*]/i,
+        # Vietnamese: đéo, đ.é.o
+        ~r/đ\s*[éeo0*]\s*o/i,
+        # Vietnamese: cặc, c.ặ.c, c*c
+        ~r/c\s*[ặa*]\s*c/i,
+        # Vietnamese: lồn, l.ồ.n, l*n
+        ~r/l\s*[ồo*]\s*n/i,
+        # Vietnamese: buồi, b.u.ồ.i
+        ~r/b\s*[u*]\s*[ồo]\s*i/i
+      ], fn regex ->
+        String.match?(lower, regex)
+      end)
+
+    has_banned or has_regex_banned or has_url or has_contact or has_sql
   end
 end

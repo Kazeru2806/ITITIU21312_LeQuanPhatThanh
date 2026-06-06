@@ -1,0 +1,300 @@
+    warning: unused alias Player
+    │
+  7 │   alias VnParty.Game.Player
+    │   ~
+    │
+    └─ lib/vn_party/game/presence.ex:7:3
+
+     warning: variable "socket" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 100 │   def terminate(_reason, socket) do
+     │                          ~~~~~~
+     │
+     └─ lib/vn_party_web/channels/display_channel.ex:100:26: VnPartyWeb.DisplayChannel.terminate/2
+
+    warning: variable "kick" is unused (if the variable is not meant to be used, prefix it with an underscore)
+    │
+ 58 │       %{kick_ref: kick} = m -> %{m | disconnect_ref: nil}
+    │                   ~
+    │
+    └─ lib/vn_party/presence_scheduler.ex:58:19: VnParty.PresenceScheduler.handle_info/2
+
+     warning: variable "mode" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 148 │   defp format_players(players, mode) do
+     │                                ~~~~
+     │
+     └─ lib/vn_party/presence_scheduler.ex:148:32: VnParty.PresenceScheduler.format_players/2
+
+     warning: variable "players" is unused (there is a variable with the same name in the context, use the pin operator (^) to match on it or prefix this variable with underscore if it is not meant to be used)
+     │
+ 235 │         players = Game.list_players(room_id)
+     │         ~
+     │
+     └─ lib/vn_party_web/channels/game_channel.ex:235:9: VnPartyWeb.GameChannel.handle_in/3
+
+     warning: clauses with the same name and arity (number of arguments) should be grouped together, "def handle_in/3" was previously defined (lib/vn_party_web/channels/game_channel.ex:55)
+     │
+ 317 │   def handle_in("heartbeat", _payload, socket) do
+     │       ~
+     │
+     └─ lib/vn_party_web/channels/game_channel.ex:317:7
+
+     warning: variable "room_id" is unused (if the variable is not meant to be used, prefix it with an underscore)
+     │
+ 506 │     room_id = room.id
+     │     ~~~~~~~
+     │
+     └─ lib/vn_party_web/channels/game_channel.ex:506:5: VnPartyWeb.GameChannel.apply_distortion_for_player/5
+
+     warning: clauses with the same name and arity (number of arguments) should be grouped together, "def handle_in/3" was previously defined (lib/vn_party_web/channels/game_channel.ex:55)
+     │
+ 653 │   def handle_in("truth_discussion_ready", payload, socket) do
+     │       ~
+     │
+     └─ lib/vn_party_web/channels/game_channel.ex:653:7
+
+      warning: function prepare_truth_round_base/2 is unused
+      │
+ 1523 │   defp prepare_truth_round_base(room, round) do
+      │        ~
+      │
+      └─ lib/vn_party_web/channels/game_channel.ex:1523:8: VnPartyWeb.GameChannel (module)
+
+      warning: default values for the optional arguments in the private function format_players/2 are never used
+      │
+ 2211 │   defp format_players(players, mode \\ "classic") do
+      │        ~
+      │
+      └─ lib/vn_party_web/channels/game_channel.ex:2211:8: VnPartyWeb.GameChannel (module)
+
+Running ExUnit with seed: 578778, max_cases: 20
+
+.......    warning: no route path for VnPartyWeb.Router matches "/"
+    │
+  5 │     conn = get(conn, ~p"/")
+    │                        ~
+    │
+    └─ test/vn_party_web/controllers/page_controller_test.exs:5: VnPartyWeb.PageControllerTest."test GET /"/1
+
+
+
+  1) test GET / (VnPartyWeb.PageControllerTest)
+     test/vn_party_web/controllers/page_controller_test.exs:4
+     ** (RuntimeError) expected response with status 200, got: 404, with body:
+     "Not Found"
+     code: assert html_response(conn, 200) =~ "Peace of mind from prototype to production"
+     stacktrace:
+       (phoenix 1.8.3) lib/phoenix/test/conn_test.ex:373: Phoenix.ConnTest.response/2
+       (phoenix 1.8.3) lib/phoenix/test/conn_test.ex:387: Phoenix.ConnTest.html_response/2
+       test/vn_party_web/controllers/page_controller_test.exs:6: (test)
+
+.19:00:52.783 [error] Postgrex.Protocol (#PID<0.326.0>) disconnected: ** (DBConnection.ConnectionError) owner #PID<0.466.0> exited
+
+Client #PID<0.470.0> is still using a connection from owner at location:
+
+    :erlang.port_command/3
+    :prim_inet.send/4
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:3348: Postgrex.Protocol.do_send/3
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:2241: Postgrex.Protocol.rebind_execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3
+    (db_connection 2.8.1) lib/db_connection/holder.ex:354: DBConnection.Holder.holder_apply/4
+    (db_connection 2.8.1) lib/db_connection.ex:1555: DBConnection.run_execute/5
+    (db_connection 2.8.1) lib/db_connection.ex:1650: DBConnection.run/6
+    (db_connection 2.8.1) lib/db_connection.ex:826: DBConnection.execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/postgres/connection.ex:137: Ecto.Adapters.Postgres.Connection.execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1050: Ecto.Adapters.SQL.execute!/5
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1006: Ecto.Adapters.SQL.execute/6
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:241: Ecto.Repo.Queryable.execute/4
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:19: Ecto.Repo.Queryable.all/3
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:163: Ecto.Repo.Queryable.one/3
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:20: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+The connection itself was checked out by #PID<0.470.0> at location:
+
+    (ecto_sql 3.13.3) lib/ecto/adapters/postgres/connection.ex:137: Ecto.Adapters.Postgres.Connection.execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1050: Ecto.Adapters.SQL.execute!/5
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1006: Ecto.Adapters.SQL.execute/6
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:241: Ecto.Repo.Queryable.execute/4
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:19: Ecto.Repo.Queryable.all/3
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:163: Ecto.Repo.Queryable.one/3
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:20: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+
+19:00:52.792 [error] Task #PID<0.470.0> started from #PID<0.466.0> terminating
+** (stop) exited in: DBConnection.Holder.checkout(#PID<0.467.0>, [log: #Function<14.3548038/1 in Ecto.Adapters.SQL.with_log/4>, source: "blockchain_anchors", cache_statement: "ecto_insert_blockchain_anchors_0", cast_params: ["pending", 3, "7c2bd141-72e2-4407-bf01-a0a6aae01532", "981427889ad6cbf93b1aa20643df0e6234af4e0055ad070df1b81cbc673eab46", "1211df6aae037987cdb1642ece0cc8c8205a00e14258cef8e71d3ebed6f0e00e", "15af3544-83b6-4059-859c-0fbe30d0d0dc", "79def6da6c44bdca8335c3626a7eef5004c91425ae53605fc30852cc4f9042d0", ~U[2026-06-06 12:00:52Z], ~U[2026-06-06 12:00:52Z], "aca16695-42e4-4e41-865b-b01e36995c9d"], on_conflict: :nothing, conflict_target: :event_id, pool: DBConnection.Ownership, repo: VnParty.Repo, timeout: 15000, pool_size: 20])
+    ** (EXIT) shutdown: %DBConnection.ConnectionError{message: "owner #PID<0.466.0> exited\n\nClient #PID<0.470.0> is still using a connection from owner at location:\n\n    :erlang.port_command/3\n    :prim_inet.send/4\n    (postgrex 0.21.1) lib/postgrex/protocol.ex:3348: Postgrex.Protocol.do_send/3\n    (postgrex 0.21.1) lib/postgrex/protocol.ex:2241: Postgrex.Protocol.rebind_execute/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3\n    (db_connection 2.8.1) lib/db_connection/holder.ex:354: DBConnection.Holder.holder_apply/4\n    (db_connection 2.8.1) lib/db_connection.ex:1555: DBConnection.run_execute/5\n    (db_connection 2.8.1) lib/db_connection.ex:1650: DBConnection.run/6\n    (db_connection 2.8.1) lib/db_connection.ex:826: DBConnection.execute/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/postgres/connection.ex:137: Ecto.Adapters.Postgres.Connection.execute/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1050: Ecto.Adapters.SQL.execute!/5\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1006: Ecto.Adapters.SQL.execute/6\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:241: Ecto.Repo.Queryable.execute/4\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:19: Ecto.Repo.Queryable.all/3\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:163: Ecto.Repo.Queryable.one/3\n    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:20: VnParty.Blockchain.AuditTrail.anchor_event/1\n    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2\n\nThe connection itself was checked out by #PID<0.470.0> at location:\n\n    (ecto_sql 3.13.3) lib/ecto/adapters/postgres/connection.ex:137: Ecto.Adapters.Postgres.Connection.execute/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1050: Ecto.Adapters.SQL.execute!/5\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1006: Ecto.Adapters.SQL.execute/6\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:241: Ecto.Repo.Queryable.execute/4\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:19: Ecto.Repo.Queryable.all/3\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:163: Ecto.Repo.Queryable.one/3\n    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:20: VnParty.Blockchain.AuditTrail.anchor_event/1\n    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2\n\n", severity: :error, reason: :error}
+    (db_connection 2.8.1) lib/db_connection/holder.ex:97: DBConnection.Holder.checkout/3
+    (db_connection 2.8.1) lib/db_connection/holder.ex:78: DBConnection.Holder.checkout/3
+    (db_connection 2.8.1) lib/db_connection.ex:1323: DBConnection.checkout/3
+    (db_connection 2.8.1) lib/db_connection.ex:1648: DBConnection.run/6
+    (db_connection 2.8.1) lib/db_connection.ex:769: DBConnection.parsed_prepare_execute/5
+    (db_connection 2.8.1) lib/db_connection.ex:761: DBConnection.prepare_execute/4
+    (postgrex 0.21.1) lib/postgrex.ex:298: Postgrex.query/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1176: Ecto.Adapters.SQL.struct/10
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:1000: Ecto.Repo.Schema.apply/4
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:500: anonymous fn/15 in Ecto.Repo.Schema.do_insert/4
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:37: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+Function: #Function<0.95532003/0 in VnParty.Blockchain.AuditTrail.on_event/1>
+    Args: []
+.19:00:52.801 [error] Postgrex.Protocol (#PID<0.324.0>) disconnected: ** (DBConnection.ConnectionError) owner #PID<0.471.0> exited
+
+Client #PID<0.476.0> is still using a connection from owner at location:
+
+    :erlang.port_control/3
+    :prim_inet.ctl_cmd/3
+    :prim_inet.async_recv/3
+    :prim_inet.recv0/3
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:3261: Postgrex.Protocol.msg_recv/4
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:2956: Postgrex.Protocol.recv_transaction/4
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:2242: Postgrex.Protocol.rebind_execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3
+    (db_connection 2.8.1) lib/db_connection/holder.ex:354: DBConnection.Holder.holder_apply/4
+    (db_connection 2.8.1) lib/db_connection.ex:1555: DBConnection.run_execute/5
+    (db_connection 2.8.1) lib/db_connection.ex:1650: DBConnection.run/6
+    (db_connection 2.8.1) lib/db_connection.ex:769: DBConnection.parsed_prepare_execute/5
+    (db_connection 2.8.1) lib/db_connection.ex:761: DBConnection.prepare_execute/4
+    (postgrex 0.21.1) lib/postgrex.ex:298: Postgrex.query/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1176: Ecto.Adapters.SQL.struct/10
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:1000: Ecto.Repo.Schema.apply/4
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:500: anonymous fn/15 in Ecto.Repo.Schema.do_insert/4
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:37: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+The connection itself was checked out by #PID<0.476.0> at location:
+
+    (postgrex 0.21.1) lib/postgrex.ex:298: Postgrex.query/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1176: Ecto.Adapters.SQL.struct/10
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:1000: Ecto.Repo.Schema.apply/4
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:500: anonymous fn/15 in Ecto.Repo.Schema.do_insert/4
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:37: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+
+19:00:52.801 [error] Task #PID<0.476.0> started from #PID<0.471.0> terminating
+** (stop) exited in: DBConnection.Holder.checkout(#PID<0.472.0>, [log: #Function<14.3548038/1 in Ecto.Adapters.SQL.with_log/4>, source: "blockchain_anchors", cache_statement: "ecto_update_blockchain_anchors_1", cast_params: ["simulated", ~U[2026-06-06 12:00:52Z], "ed97a1f8-6b65-466e-b3ba-c68c33832db9"], pool: DBConnection.Ownership, repo: VnParty.Repo, timeout: 15000, pool_size: 20])
+    ** (EXIT) shutdown: %DBConnection.ConnectionError{message: "owner #PID<0.471.0> exited\n\nClient #PID<0.476.0> is still using a connection from owner at location:\n\n    :erlang.port_control/3\n    :prim_inet.ctl_cmd/3\n    :prim_inet.async_recv/3\n    :prim_inet.recv0/3\n    (postgrex 0.21.1) lib/postgrex/protocol.ex:3261: Postgrex.Protocol.msg_recv/4\n    (postgrex 0.21.1) lib/postgrex/protocol.ex:2956: Postgrex.Protocol.recv_transaction/4\n    (postgrex 0.21.1) lib/postgrex/protocol.ex:2242: Postgrex.Protocol.rebind_execute/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3\n    (db_connection 2.8.1) lib/db_connection/holder.ex:354: DBConnection.Holder.holder_apply/4\n    (db_connection 2.8.1) lib/db_connection.ex:1555: DBConnection.run_execute/5\n    (db_connection 2.8.1) lib/db_connection.ex:1650: DBConnection.run/6\n    (db_connection 2.8.1) lib/db_connection.ex:769: DBConnection.parsed_prepare_execute/5\n    (db_connection 2.8.1) lib/db_connection.ex:761: DBConnection.prepare_execute/4\n    (postgrex 0.21.1) lib/postgrex.ex:298: Postgrex.query/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1176: Ecto.Adapters.SQL.struct/10\n    (ecto 3.13.5) lib/ecto/repo/schema.ex:1000: Ecto.Repo.Schema.apply/4\n    (ecto 3.13.5) lib/ecto/repo/schema.ex:500: anonymous fn/15 in Ecto.Repo.Schema.do_insert/4\n    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:37: VnParty.Blockchain.AuditTrail.anchor_event/1\n    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2\n\nThe connection itself was checked out by #PID<0.476.0> at location:\n\n    (postgrex 0.21.1) lib/postgrex.ex:298: Postgrex.query/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1176: Ecto.Adapters.SQL.struct/10\n    (ecto 3.13.5) lib/ecto/repo/schema.ex:1000: Ecto.Repo.Schema.apply/4\n    (ecto 3.13.5) lib/ecto/repo/schema.ex:500: anonymous fn/15 in Ecto.Repo.Schema.do_insert/4\n    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:37: VnParty.Blockchain.AuditTrail.anchor_event/1\n    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2\n\n", severity: :error, reason: :error}
+    (db_connection 2.8.1) lib/db_connection/holder.ex:97: DBConnection.Holder.checkout/3
+    (db_connection 2.8.1) lib/db_connection/holder.ex:78: DBConnection.Holder.checkout/3
+    (db_connection 2.8.1) lib/db_connection.ex:1323: DBConnection.checkout/3
+    (db_connection 2.8.1) lib/db_connection.ex:1648: DBConnection.run/6
+    (db_connection 2.8.1) lib/db_connection.ex:769: DBConnection.parsed_prepare_execute/5
+    (db_connection 2.8.1) lib/db_connection.ex:761: DBConnection.prepare_execute/4
+    (postgrex 0.21.1) lib/postgrex.ex:298: Postgrex.query/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1176: Ecto.Adapters.SQL.struct/10
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:1000: Ecto.Repo.Schema.apply/4
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:594: anonymous fn/15 in Ecto.Repo.Schema.do_update/4
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+Function: #Function<0.95532003/0 in VnParty.Blockchain.AuditTrail.on_event/1>
+    Args: []
+..
+=== H3 Attack Simulation Results ===
+replay_attack: detected=100/100 rate=100.0%
+late_commit: detected=100/100 rate=100.0%
+hash_tampering: detected=100/100 rate=100.0%
+timing_manipulation: detected=100/100 rate=100.0%
+overall: detected=400/400 rate=100.0%
+.......💾 persist_distortion: storing remove_option by ee64f4a4-a87d-432e-b575-dc939d404332 for round 2, payload=%{"target_player_id" => "a87bdbdd-d49b-4d64-95a6-ff5ef0422dd9"}
+✅ persist_distortion: stored. ETS entries for room=1
+.19:00:53.856 [error] Postgrex.Protocol (#PID<0.331.0>) disconnected: ** (DBConnection.ConnectionError) owner #PID<0.1608.0> exited
+
+Client #PID<0.1614.0> is still using a connection from owner at location:
+
+    :erlang.port_command/3
+    :prim_inet.send/4
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:3348: Postgrex.Protocol.do_send/3
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:2241: Postgrex.Protocol.rebind_execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3
+    (db_connection 2.8.1) lib/db_connection/holder.ex:354: DBConnection.Holder.holder_apply/4
+    (db_connection 2.8.1) lib/db_connection.ex:1555: DBConnection.run_execute/5
+    (db_connection 2.8.1) lib/db_connection.ex:1650: DBConnection.run/6
+    (db_connection 2.8.1) lib/db_connection.ex:769: DBConnection.parsed_prepare_execute/5
+    (db_connection 2.8.1) lib/db_connection.ex:761: DBConnection.prepare_execute/4
+    (postgrex 0.21.1) lib/postgrex.ex:298: Postgrex.query/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1176: Ecto.Adapters.SQL.struct/10
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:1000: Ecto.Repo.Schema.apply/4
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:500: anonymous fn/15 in Ecto.Repo.Schema.do_insert/4
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:37: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+The connection itself was checked out by #PID<0.1614.0> at location:
+
+    (postgrex 0.21.1) lib/postgrex.ex:298: Postgrex.query/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1176: Ecto.Adapters.SQL.struct/10
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:1000: Ecto.Repo.Schema.apply/4
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:500: anonymous fn/15 in Ecto.Repo.Schema.do_insert/4
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:37: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+
+19:00:53.863 [error] Task #PID<0.1614.0> started from #PID<0.1608.0> terminating
+** (Ecto.StaleEntryError) attempted to update a stale struct:
+
+%VnParty.Game.BlockchainAnchor{__meta__: #Ecto.Schema.Metadata<:loaded, "blockchain_anchors">, id: "8f2c56fa-3da5-42b3-8668-9f457c8d1de4", seq: 5, event_hash: "a8627638033af3a71cbc9fdc9d20f3768bdb914c870bc277fc2ae22ac3407c63", prev_chain_hash: "8ca782e870cebbe694aefef9bc2af6951f660b760e9c64f13f17373f99f5f599", chain_hash: "88562d334c00a69130f891b1537dbe19d45caf9a9811719f555aefb6189f26f2", tx_hash: nil, status: "pending", error: nil, room_id: "eb3fcf20-c09e-4f8b-96f2-2dd4ac6d35b5", room: #Ecto.Association.NotLoaded<association :room is not loaded>, event_id: "54c091f3-8b41-4adb-8fcb-87d6aa2a47b7", event: #Ecto.Association.NotLoaded<association :event is not loaded>, inserted_at: ~U[2026-06-06 12:00:53Z], updated_at: ~U[2026-06-06 12:00:53Z]}
+
+This typically happens when the struct no longer exists in the database or a database trigger/rule has forbidden the action. If stale entries are expected, you may use `:stale_error_field` to convert this into a changeset error, or set `:allow_stale` to true if you would like stale operations to be considered a success (such as a stale deletion)
+
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:1023: Ecto.Repo.Schema.apply/4
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:594: anonymous fn/15 in Ecto.Repo.Schema.do_update/4
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+Function: #Function<0.95532003/0 in VnParty.Blockchain.AuditTrail.on_event/1>
+    Args: []
+💾 persist_distortion: storing remove_option by 2256514f-13b7-464e-b2e1-05fa9f072801 for round 2, payload=%{"target_player_id" => "31889064-5c1f-4d03-9169-da8f660ba4a4"}
+✅ persist_distortion: stored. ETS entries for room=1
+.
+Finished in 1.2 seconds (0.09s async, 1.1s sync)
+21 tests, 1 failure
+19:00:53.867 [error] Postgrex.Protocol (#PID<0.330.0>) disconnected: ** (DBConnection.ConnectionError) owner #PID<0.1615.0> exited
+
+Client #PID<0.1621.0> is still using a connection from owner at location:
+
+    :prim_inet.recv0/3
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:3261: Postgrex.Protocol.msg_recv/4
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:2956: Postgrex.Protocol.recv_transaction/4
+    (postgrex 0.21.1) lib/postgrex/protocol.ex:2242: Postgrex.Protocol.rebind_execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3
+    (db_connection 2.8.1) lib/db_connection/holder.ex:354: DBConnection.Holder.holder_apply/4
+    (db_connection 2.8.1) lib/db_connection.ex:1555: DBConnection.run_execute/5
+    (db_connection 2.8.1) lib/db_connection.ex:1650: DBConnection.run/6
+    (db_connection 2.8.1) lib/db_connection.ex:826: DBConnection.execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/postgres/connection.ex:137: Ecto.Adapters.Postgres.Connection.execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1050: Ecto.Adapters.SQL.execute!/5
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1006: Ecto.Adapters.SQL.execute/6
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:241: Ecto.Repo.Queryable.execute/4
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:19: Ecto.Repo.Queryable.all/3
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:163: Ecto.Repo.Queryable.one/3
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:20: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+The connection itself was checked out by #PID<0.1621.0> at location:
+
+    (ecto_sql 3.13.3) lib/ecto/adapters/postgres/connection.ex:137: Ecto.Adapters.Postgres.Connection.execute/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1050: Ecto.Adapters.SQL.execute!/5
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1006: Ecto.Adapters.SQL.execute/6
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:241: Ecto.Repo.Queryable.execute/4
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:19: Ecto.Repo.Queryable.all/3
+    (ecto 3.13.5) lib/ecto/repo/queryable.ex:163: Ecto.Repo.Queryable.one/3
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:20: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+
+
+19:00:53.867 [error] Task #PID<0.1621.0> started from #PID<0.1615.0> terminating
+** (stop) exited in: DBConnection.Holder.checkout(#PID<0.1616.0>, [log: #Function<14.3548038/1 in Ecto.Adapters.SQL.with_log/4>, source: "blockchain_anchors", cache_statement: "ecto_insert_blockchain_anchors_0", cast_params: ["pending", 5, "da812cf1-000f-468d-9b4e-905844decbd3", "6fe68129bf99b2f512edf688656aafd591c8087ff92bd19fceb6f137d8d6110d", "90a8ad2274cec53f4dbb1fda6b30bb254f9e6b3661670493e91b8b360528ecb1", "b4f252cd-8c55-4e04-b24e-0e4ee4fe5c63", "625492e190d44f5e1c414781eebc0fad9cc56d807357a7b6b21e870161c92976", ~U[2026-06-06 12:00:53Z], ~U[2026-06-06 12:00:53Z], "bca2fa53-71ff-479f-bbeb-f219b78ccdb5"], on_conflict: :nothing, conflict_target: :event_id, pool: DBConnection.Ownership, repo: VnParty.Repo, timeout: 15000, pool_size: 20])
+    ** (EXIT) shutdown: %DBConnection.ConnectionError{message: "owner #PID<0.1615.0> exited\n\nClient #PID<0.1621.0> is still using a connection from owner at location:\n\n    :prim_inet.recv0/3\n    (postgrex 0.21.1) lib/postgrex/protocol.ex:3261: Postgrex.Protocol.msg_recv/4\n    (postgrex 0.21.1) lib/postgrex/protocol.ex:2956: Postgrex.Protocol.recv_transaction/4\n    (postgrex 0.21.1) lib/postgrex/protocol.ex:2242: Postgrex.Protocol.rebind_execute/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql/sandbox.ex:412: Ecto.Adapters.SQL.Sandbox.Connection.proxy/3\n    (db_connection 2.8.1) lib/db_connection/holder.ex:354: DBConnection.Holder.holder_apply/4\n    (db_connection 2.8.1) lib/db_connection.ex:1555: DBConnection.run_execute/5\n    (db_connection 2.8.1) lib/db_connection.ex:1650: DBConnection.run/6\n    (db_connection 2.8.1) lib/db_connection.ex:826: DBConnection.execute/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/postgres/connection.ex:137: Ecto.Adapters.Postgres.Connection.execute/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1050: Ecto.Adapters.SQL.execute!/5\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1006: Ecto.Adapters.SQL.execute/6\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:241: Ecto.Repo.Queryable.execute/4\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:19: Ecto.Repo.Queryable.all/3\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:163: Ecto.Repo.Queryable.one/3\n    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:20: VnParty.Blockchain.AuditTrail.anchor_event/1\n    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2\n\nThe connection itself was checked out by #PID<0.1621.0> at location:\n\n    (ecto_sql 3.13.3) lib/ecto/adapters/postgres/connection.ex:137: Ecto.Adapters.Postgres.Connection.execute/4\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1050: Ecto.Adapters.SQL.execute!/5\n    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1006: Ecto.Adapters.SQL.execute/6\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:241: Ecto.Repo.Queryable.execute/4\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:19: Ecto.Repo.Queryable.all/3\n    (ecto 3.13.5) lib/ecto/repo/queryable.ex:163: Ecto.Repo.Queryable.one/3\n    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:20: VnParty.Blockchain.AuditTrail.anchor_event/1\n    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2\n\n", severity: :error, reason: :error}
+    (db_connection 2.8.1) lib/db_connection/holder.ex:97: DBConnection.Holder.checkout/3
+    (db_connection 2.8.1) lib/db_connection/holder.ex:78: DBConnection.Holder.checkout/3
+    (db_connection 2.8.1) lib/db_connection.ex:1323: DBConnection.checkout/3
+    (db_connection 2.8.1) lib/db_connection.ex:1648: DBConnection.run/6
+    (db_connection 2.8.1) lib/db_connection.ex:769: DBConnection.parsed_prepare_execute/5
+    (db_connection 2.8.1) lib/db_connection.ex:761: DBConnection.prepare_execute/4
+    (postgrex 0.21.1) lib/postgrex.ex:298: Postgrex.query/4
+    (ecto_sql 3.13.3) lib/ecto/adapters/sql.ex:1176: Ecto.Adapters.SQL.struct/10
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:1000: Ecto.Repo.Schema.apply/4
+    (ecto 3.13.5) lib/ecto/repo/schema.ex:500: anonymous fn/15 in Ecto.Repo.Schema.do_insert/4
+    (vn_party 0.1.0) lib/vn_party/blockchain/audit_trail.ex:37: VnParty.Blockchain.AuditTrail.anchor_event/1
+    (elixir 1.19.5) lib/task/supervised.ex:105: Task.Supervised.invoke_mfa/2
+Function: #Function<0.95532003/0 in VnParty.Blockchain.AuditTrail.on_event/1>
+    Args: []
