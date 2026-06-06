@@ -166,5 +166,5 @@ export default function () {
       }
     }
     errorRate.add(gotQuestion ? 0 : 1);
-  }, 8000);
+  }, 13000);
 }
