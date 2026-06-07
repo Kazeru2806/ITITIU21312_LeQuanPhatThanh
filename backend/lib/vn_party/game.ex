@@ -16,41 +16,55 @@ defmodule VnParty.Game do
     Creates a new game room.
     Returns {:ok, room} or {:error, changeset}
     """
-def create_room(attrs \\ %{}) do
-  code = Room.generate_code()
 
-  attrs = Map.new(attrs, fn {k, v} -> {to_string(k), v} end)
-  mode = Map.get(attrs, "mode", "classic")
-  total_rounds_default = if mode == "truth_collapse", do: 8, else: 5
+  def create_room(attrs \\ %{}) do
+    code = Room.generate_code()
 
-  # Convert all keys to atoms and merge with defaults
-  attrs =
-    attrs
-    |> Map.put("code", code)
-    |> Map.put_new("state", "lobby")
-    |> Map.put_new("total_rounds", total_rounds_default)
-    |> Map.put_new("max_players", 8)
-    |> Map.update("config", %{"mode" => mode}, fn config ->
-      config = Map.new(config, fn {k, v} -> {to_string(k), v} end)
-      Map.put_new(config, "mode", mode)
-    end)
+    attrs = Map.new(attrs, fn {k, v} -> {to_string(k), v} end)
+    mode = Map.get(attrs, "mode", "classic")
+    total_rounds_default = if mode == "truth_collapse", do: 8, else: 5
 
-  %Room{}
-  |> Room.changeset(attrs)
-  |> Repo.insert()
-  |> case do
-    {:ok, room} ->
-      # Log room creation event
+    # Convert all keys to atoms and merge with defaults
+    attrs =
+      attrs
+      |> Map.put("code", code)
+      |> Map.put_new("state", "lobby")
+      |> Map.put_new("total_rounds", total_rounds_default)
+      |> Map.put_new("max_players", 8)
+      |> Map.update("config", %{"mode" => mode}, fn config ->
+        config = Map.new(config, fn {k, v} -> {to_string(k), v} end)
+        Map.put_new(config, "mode", mode)
+      end)
+
+    if cache_enabled?() do
+      room = %Room{
+        id: Ecto.UUID.generate(),
+        code: code,
+        state: Map.get(attrs, "state"),
+        total_rounds: Map.get(attrs, "total_rounds"),
+        max_players: Map.get(attrs, "max_players"),
+        config: Map.get(attrs, "config"),
+        inserted_at: DateTime.utc_now(),
+        updated_at: DateTime.utc_now()
+      }
+      :ets.insert(:room_cache, {room.code, room})
+      :ets.insert(:room_cache, {room.id, room})
+      :ets.insert(:room_players_cache, {room.id, []})
       create_event(room.id, "room_created", %{code: code})
-      if cache_enabled?() do
-        :ets.insert(:room_cache, {room.code, room})
-        :ets.insert(:room_cache, {room.id, room})
-        :ets.insert(:room_players_cache, {room.id, []})
-      end
       {:ok, room}
-    error -> error
+    else
+      %Room{}
+      |> Room.changeset(attrs)
+      |> Repo.insert()
+      |> case do
+        {:ok, room} ->
+          # Log room creation event
+          create_event(room.id, "room_created", %{code: code})
+          {:ok, room}
+        error -> error
+      end
+    end
   end
-end
 
   def room_mode(room) do
     case room.config do
@@ -123,22 +137,29 @@ end
   @doc """
   Updates a room's state.
   """
-    def update_room_state(room, new_state) do
-    room
-    |> Room.update_state_changeset(new_state)
-    |> Repo.update()
-    |> case do
-      {:ok, updated_room} ->
-        create_event(room.id, "state_changed", %{
-          old_state: room.state,
-          new_state: new_state
-        })
-        if cache_enabled?() do
-          :ets.insert(:room_cache, {updated_room.code, updated_room})
-          :ets.insert(:room_cache, {updated_room.id, updated_room})
-        end
-        {:ok, updated_room}
-      error -> error
+  def update_room_state(room, new_state) do
+    if cache_enabled?() do
+      updated_room = %{room | state: new_state}
+      :ets.insert(:room_cache, {updated_room.code, updated_room})
+      :ets.insert(:room_cache, {updated_room.id, updated_room})
+      create_event(room.id, "state_changed", %{
+        old_state: room.state,
+        new_state: new_state
+      })
+      {:ok, updated_room}
+    else
+      room
+      |> Room.update_state_changeset(new_state)
+      |> Repo.update()
+      |> case do
+        {:ok, updated_room} ->
+          create_event(room.id, "state_changed", %{
+            old_state: room.state,
+            new_state: new_state
+          })
+          {:ok, updated_room}
+        error -> error
+      end
     end
   end
 
@@ -146,18 +167,22 @@ end
   Advances room to the next round.
   """
   def advance_round(room) do
-    room
-    |> Room.advance_round_changeset()
-    |> Repo.update()
-    |> case do
-      {:ok, updated_room} ->
-        create_event(room.id, "round_started", %{round: updated_room.current_round})
-        if cache_enabled?() do
-          :ets.insert(:room_cache, {updated_room.code, updated_room})
-          :ets.insert(:room_cache, {updated_room.id, updated_room})
-        end
-        {:ok, updated_room}
-      error -> error
+    if cache_enabled?() do
+      updated_room = %{room | current_round: room.current_round + 1}
+      :ets.insert(:room_cache, {updated_room.code, updated_room})
+      :ets.insert(:room_cache, {updated_room.id, updated_room})
+      create_event(room.id, "round_started", %{round: updated_room.current_round})
+      {:ok, updated_room}
+    else
+      room
+      |> Room.advance_round_changeset()
+      |> Repo.update()
+      |> case do
+        {:ok, updated_room} ->
+          create_event(room.id, "round_started", %{round: updated_room.current_round})
+          {:ok, updated_room}
+        error -> error
+      end
     end
   end
 
@@ -167,22 +192,26 @@ end
   def start_game(room_id) do
     room = get_room!(room_id)
 
-    room
-    |> Room.changeset(%{
-      state: "round_start",
-      current_round: 1,
-      started_at: DateTime.utc_now()
-    })
-    |> Repo.update()
-    |> case do
-      {:ok, updated_room} ->
-        create_event(room.id, "game_started", %{})
-        if cache_enabled?() do
-          :ets.insert(:room_cache, {updated_room.code, updated_room})
-          :ets.insert(:room_cache, {updated_room.id, updated_room})
-        end
-        {:ok, updated_room}
-      error -> error
+    if cache_enabled?() do
+      updated_room = %{room | state: "round_start", current_round: 1, started_at: DateTime.utc_now()}
+      :ets.insert(:room_cache, {updated_room.code, updated_room})
+      :ets.insert(:room_cache, {updated_room.id, updated_room})
+      create_event(room.id, "game_started", %{})
+      {:ok, updated_room}
+    else
+      room
+      |> Room.changeset(%{
+        state: "round_start",
+        current_round: 1,
+        started_at: DateTime.utc_now()
+      })
+      |> Repo.update()
+      |> case do
+        {:ok, updated_room} ->
+          create_event(room.id, "game_started", %{})
+          {:ok, updated_room}
+        error -> error
+      end
     end
   end
 
@@ -342,14 +371,30 @@ end
       |> Map.put(:joined_at, DateTime.utc_now())
       |> Map.put(:is_host, count_players_in_room(room.id) == 0)
 
-    %Player{}
-    |> Player.changeset(attrs)
-    |> Repo.insert()
-    |> case do
-      {:ok, player} ->
-        update_player_in_cache(player)
-        {:ok, player}
-      error -> error
+    if cache_enabled?() do
+      player = %Player{
+        id: Ecto.UUID.generate(),
+        room_id: room.id,
+        nickname: nickname,
+        is_host: Map.get(attrs, :is_host),
+        joined_at: DateTime.utc_now(),
+        connected: true,
+        score: 0,
+        inserted_at: DateTime.utc_now(),
+        updated_at: DateTime.utc_now()
+      }
+      update_player_in_cache(player)
+      {:ok, player}
+    else
+      %Player{}
+      |> Player.changeset(attrs)
+      |> Repo.insert()
+      |> case do
+        {:ok, player} ->
+          update_player_in_cache(player)
+          {:ok, player}
+        error -> error
+      end
     end
   end
 
@@ -437,14 +482,20 @@ end
   def update_player_connection(player_id, connected) do
     player = get_player!(player_id)
 
-    player
-    |> Player.update_connection_changeset(connected)
-    |> Repo.update()
-    |> case do
-      {:ok, updated} ->
-        update_player_in_cache(updated)
-        {:ok, updated}
-      error -> error
+    if cache_enabled?() do
+      updated = %{player | connected: connected, last_seen_at: DateTime.utc_now(), updated_at: DateTime.utc_now()}
+      update_player_in_cache(updated)
+      {:ok, updated}
+    else
+      player
+      |> Player.update_connection_changeset(connected)
+      |> Repo.update()
+      |> case do
+        {:ok, updated} ->
+          update_player_in_cache(updated)
+          {:ok, updated}
+        error -> error
+      end
     end
   end
 
@@ -455,43 +506,74 @@ end
   Falls back to the first remaining player if nobody is currently connected.
   """
   def ensure_connected_host(room_id) do
-    Repo.transaction(fn ->
+    if cache_enabled?() do
       players = list_players(room_id)
-
-      has_connected_host? =
-        Enum.any?(players, fn p -> p.is_host and p.connected end)
+      has_connected_host? = Enum.any?(players, fn p -> p.is_host and p.connected end)
 
       if has_connected_host? do
-        nil
+        {:ok, nil}
       else
-        from(p in Player, where: p.room_id == ^room_id)
-        |> Repo.update_all(set: [is_host: false])
+        players_dehosted = Enum.map(players, fn p -> %{p | is_host: false} end)
+        new_host = Enum.find(players_dehosted, & &1.connected)
 
-        new_host = Enum.find(players, & &1.connected)
-
-        if new_host do
-          case new_host |> Player.make_host_changeset() |> Repo.update() do
-            {:ok, host} -> host
-            {:error, _} -> nil
+        players_updated =
+          if new_host do
+            Enum.map(players_dehosted, fn p ->
+              if p.id == new_host.id do
+                %{p | is_host: true}
+              else
+                p
+              end
+            end)
+          else
+            players_dehosted
           end
-        else
-          nil
-        end
+
+        :ets.insert(:room_players_cache, {room_id, players_updated})
+        Enum.each(players_updated, fn p -> :ets.insert(:player_cache, {p.id, p}) end)
+
+        new_host_final = if new_host, do: %{new_host | is_host: true}, else: nil
+        {:ok, new_host_final}
       end
-    end)
-    |> case do
-      {:ok, host} ->
-        if cache_enabled?() do
-          players =
-            Player
-            |> where([p], p.room_id == ^room_id)
-            |> order_by([p], desc: p.score, asc: p.joined_at)
-            |> Repo.all()
-          :ets.insert(:room_players_cache, {room_id, players})
-          Enum.each(players, fn p -> :ets.insert(:player_cache, {p.id, p}) end)
+    else
+      Repo.transaction(fn ->
+        players = list_players(room_id)
+
+        has_connected_host? =
+          Enum.any?(players, fn p -> p.is_host and p.connected end)
+
+        if has_connected_host? do
+          nil
+        else
+          from(p in Player, where: p.room_id == ^room_id)
+          |> Repo.update_all(set: [is_host: false])
+
+          new_host = Enum.find(players, & &1.connected)
+
+          if new_host do
+            case new_host |> Player.make_host_changeset() |> Repo.update() do
+              {:ok, host} -> host
+              {:error, _} -> nil
+            end
+          else
+            nil
+          end
         end
-        {:ok, host}
-      {:error, reason} -> {:error, reason}
+      end)
+      |> case do
+        {:ok, host} ->
+          if cache_enabled?() do
+            players =
+              Player
+              |> where([p], p.room_id == ^room_id)
+              |> order_by([p], desc: p.score, asc: p.joined_at)
+              |> Repo.all()
+            :ets.insert(:room_players_cache, {room_id, players})
+            Enum.each(players, fn p -> :ets.insert(:player_cache, {p.id, p}) end)
+          end
+          {:ok, host}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 
@@ -501,14 +583,21 @@ end
   def update_player_score(player_id, points) do
     player = get_player!(player_id)
 
-    player
-    |> Player.update_score_changeset(points)
-    |> Repo.update()
-    |> case do
-      {:ok, updated} ->
-        update_player_in_cache(updated)
-        {:ok, updated}
-      error -> error
+    if cache_enabled?() do
+      new_score = max(0, player.score + points)
+      updated = %{player | score: new_score, updated_at: DateTime.utc_now()}
+      update_player_in_cache(updated)
+      {:ok, updated}
+    else
+      player
+      |> Player.update_score_changeset(points)
+      |> Repo.update()
+      |> case do
+        {:ok, updated} ->
+          update_player_in_cache(updated)
+          {:ok, updated}
+        error -> error
+      end
     end
   end
 
@@ -519,33 +608,56 @@ end
     player = get_player!(player_id)
     room_id = player.room_id
 
-    case Repo.delete(player) do
-      {:ok, deleted} ->
-        :ets.delete(:player_absent, player_id)
-        :ets.delete(:player_round_skip, player_id)
+    if cache_enabled?() do
+      :ets.delete(:player_absent, player_id)
+      :ets.delete(:player_round_skip, player_id)
+      :ets.delete(:player_cache, player_id)
 
-        if cache_enabled?() do
-          :ets.delete(:player_cache, player_id)
-          players =
-            case :ets.lookup(:room_players_cache, room_id) do
-              [{_, list}] -> list
-              _ -> []
-            end
-          updated_players = Enum.reject(players, fn p -> p.id == player_id end)
-          :ets.insert(:room_players_cache, {room_id, updated_players})
+      players =
+        case :ets.lookup(:room_players_cache, room_id) do
+          [{_, list}] -> list
+          _ -> []
+        end
+      updated_players = Enum.reject(players, fn p -> p.id == player_id end)
+      :ets.insert(:room_players_cache, {room_id, updated_players})
+
+      new_host =
+        case ensure_connected_host(room_id) do
+          {:ok, host} -> host
+          _ -> nil
         end
 
-        new_host =
-          case ensure_connected_host(room_id) do
-            {:ok, host} -> host
-            _ -> nil
+      VnParty.Game.Presence.broadcast_players_sync(room_id)
+      {:ok, player, new_host}
+    else
+      case Repo.delete(player) do
+        {:ok, deleted} ->
+          :ets.delete(:player_absent, player_id)
+          :ets.delete(:player_round_skip, player_id)
+
+          if cache_enabled?() do
+            :ets.delete(:player_cache, player_id)
+            players =
+              case :ets.lookup(:room_players_cache, room_id) do
+                [{_, list}] -> list
+                _ -> []
+              end
+            updated_players = Enum.reject(players, fn p -> p.id == player_id end)
+            :ets.insert(:room_players_cache, {room_id, updated_players})
           end
 
-        VnParty.Game.Presence.broadcast_players_sync(room_id)
-        {:ok, deleted, new_host}
+          new_host =
+            case ensure_connected_host(room_id) do
+              {:ok, host} -> host
+              _ -> nil
+            end
 
-      error ->
-        error
+          VnParty.Game.Presence.broadcast_players_sync(room_id)
+          {:ok, deleted, new_host}
+
+        error ->
+          error
+      end
     end
   end
 
@@ -653,25 +765,50 @@ end
   def create_event(room_id, event_type, payload, player_id \\ nil) do
     seq = get_next_sequence_number(room_id)
 
-    %Event{}
-    |> Event.changeset(%{
-      room_id: room_id,
-      player_id: player_id,
-      event_type: event_type,
-      seq: seq,
-      payload: payload,
-      metadata: %{
-        timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+    if cache_enabled?() do
+      event = %Event{
+        id: Ecto.UUID.generate(),
+        room_id: room_id,
+        player_id: player_id,
+        event_type: event_type,
+        seq: seq,
+        payload: payload,
+        metadata: %{
+          timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+        },
+        inserted_at: DateTime.utc_now()
       }
-    })
-    |> Repo.insert()
-    |> case do
-      {:ok, event} ->
-        AuditTrail.on_event(event)
-        {:ok, event}
 
-      error ->
-        error
+      events =
+        case :ets.lookup(:room_events_cache, room_id) do
+          [{_, list}] -> list
+          _ -> []
+        end
+      :ets.insert(:room_events_cache, {room_id, events ++ [event]})
+
+      AuditTrail.on_event(event)
+      {:ok, event}
+    else
+      %Event{}
+      |> Event.changeset(%{
+        room_id: room_id,
+        player_id: player_id,
+        event_type: event_type,
+        seq: seq,
+        payload: payload,
+        metadata: %{
+          timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+        }
+      })
+      |> Repo.insert()
+      |> case do
+        {:ok, event} ->
+          AuditTrail.on_event(event)
+          {:ok, event}
+
+        error ->
+          error
+      end
     end
   end
 
@@ -681,10 +818,19 @@ end
   Gets all events for a room since a given sequence number.
   """
   def get_events_since(room_id, since_seq) do
-    Event
-    |> where([e], e.room_id == ^room_id and e.seq > ^since_seq)
-    |> order_by([e], asc: e.seq)
-    |> Repo.all()
+    if cache_enabled?() do
+      case :ets.lookup(:room_events_cache, room_id) do
+        [{_, list}] ->
+          list |> Enum.filter(fn e -> e.seq > since_seq end)
+        _ ->
+          []
+      end
+    else
+      Event
+      |> where([e], e.room_id == ^room_id and e.seq > ^since_seq)
+      |> order_by([e], asc: e.seq)
+      |> Repo.all()
+    end
   end
 
   @doc """
@@ -722,24 +868,55 @@ end
   Commits a player's answer (Phase 1 of commit-reveal).
   """
   def commit_answer(room_id, player_id, round, question_id, commit_hash) do
-    %AnswerCommit{}
-    |> AnswerCommit.commit_changeset(%{
-      room_id: room_id,
-      player_id: player_id,
-      round: round,
-      question_id: question_id,
-      commit_hash: commit_hash,
-      committed_at: DateTime.utc_now()
-    })
-    |> Repo.insert()
-    |> case do
-      {:ok, commit} ->
-        create_event(room_id, "answer_committed", %{
-          player_id: player_id,
-          round: round
-        }, player_id)
-        {:ok, commit}
-      error -> error
+    if cache_enabled?() do
+      commit = %AnswerCommit{
+        id: Ecto.UUID.generate(),
+        room_id: room_id,
+        player_id: player_id,
+        round: round,
+        question_id: question_id,
+        commit_hash: commit_hash,
+        committed_at: DateTime.utc_now(),
+        inserted_at: DateTime.utc_now(),
+        updated_at: DateTime.utc_now(),
+        is_valid: true
+      }
+
+      list =
+        case :ets.lookup(:answer_commits_cache, {room_id, round}) do
+          [{_, existing}] -> existing
+          _ -> []
+        end
+
+      list = Enum.reject(list, fn c -> c.player_id == player_id end)
+      :ets.insert(:answer_commits_cache, {{room_id, round}, list ++ [commit]})
+      :ets.insert(:answer_commits_cache, {commit.id, commit})
+
+      create_event(room_id, "answer_committed", %{
+        player_id: player_id,
+        round: round
+      }, player_id)
+      {:ok, commit}
+    else
+      %AnswerCommit{}
+      |> AnswerCommit.commit_changeset(%{
+        room_id: room_id,
+        player_id: player_id,
+        round: round,
+        question_id: question_id,
+        commit_hash: commit_hash,
+        committed_at: DateTime.utc_now()
+      })
+      |> Repo.insert()
+      |> case do
+        {:ok, commit} ->
+          create_event(room_id, "answer_committed", %{
+            player_id: player_id,
+            round: round
+          }, player_id)
+          {:ok, commit}
+        error -> error
+      end
     end
   end
 
@@ -769,22 +946,46 @@ end
 
           violation = if is_integer(delay_ms) and delay_ms >= threshold_ms, do: "timing_manipulation", else: nil
 
-          commit
-          |> Ecto.Changeset.change(%{commit_delay_ms: delay_ms, violation_reason: violation})
-          |> Repo.update()
+          if cache_enabled?() do
+            updated = %{commit | commit_delay_ms: delay_ms, violation_reason: violation}
+            list =
+              case :ets.lookup(:answer_commits_cache, {room_id, round}) do
+                [{_, existing}] -> existing
+                _ -> []
+              end
+            list = Enum.map(list, fn c -> if c.id == updated.id, do: updated, else: c end)
+            :ets.insert(:answer_commits_cache, {{room_id, round}, list})
+            :ets.insert(:answer_commits_cache, {updated.id, updated})
+            {:ok, updated}
+          else
+            commit
+            |> Ecto.Changeset.change(%{commit_delay_ms: delay_ms, violation_reason: violation})
+            |> Repo.update()
+          end
         end
     end
   end
 
   defp replayed_commit_hash?(room_id, player_id, commit_hash) do
-    AnswerCommit
-    |> where([c], c.room_id == ^room_id and c.player_id == ^player_id and c.commit_hash == ^commit_hash)
-    |> select([c], c.id)
-    |> limit(1)
-    |> Repo.one()
-    |> case do
-      nil -> false
-      _ -> true
+    if cache_enabled?() do
+      1..8
+      |> Enum.flat_map(fn round ->
+        case :ets.lookup(:answer_commits_cache, {room_id, round}) do
+          [{_, list}] -> list
+          _ -> []
+        end
+      end)
+      |> Enum.any?(fn c -> c.player_id == player_id and c.commit_hash == commit_hash end)
+    else
+      AnswerCommit
+      |> where([c], c.room_id == ^room_id and c.player_id == ^player_id and c.commit_hash == ^commit_hash)
+      |> select([c], c.id)
+      |> limit(1)
+      |> Repo.one()
+      |> case do
+        nil -> false
+        _ -> true
+      end
     end
   end
 
@@ -847,9 +1048,22 @@ end
   """
   def flag_hash_tampering_if_any(%AnswerCommit{} = commit) do
     if commit.answer && commit.salt && not commit_hash_valid?(commit) do
-      commit
-      |> Ecto.Changeset.change(%{is_valid: false, violation_reason: "hash_tampering"})
-      |> Repo.update()
+      if cache_enabled?() do
+        updated = %{commit | is_valid: false, violation_reason: "hash_tampering"}
+        list =
+          case :ets.lookup(:answer_commits_cache, {commit.room_id, commit.round}) do
+            [{_, existing}] -> existing
+            _ -> []
+          end
+        list = Enum.map(list, fn c -> if c.id == updated.id, do: updated, else: c end)
+        :ets.insert(:answer_commits_cache, {{commit.room_id, commit.round}, list})
+        :ets.insert(:answer_commits_cache, {updated.id, updated})
+        {:ok, updated}
+      else
+        commit
+        |> Ecto.Changeset.change(%{is_valid: false, violation_reason: "hash_tampering"})
+        |> Repo.update()
+      end
     else
       {:ok, commit}
     end
@@ -859,28 +1073,64 @@ end
   Reveals a player's answer (Phase 2 of commit-reveal).
   """
   def reveal_answer(commit_id, answer, salt) do
-    commit = Repo.get!(AnswerCommit, commit_id)
+    if cache_enabled?() do
+      case :ets.lookup(:answer_commits_cache, commit_id) do
+        [{_, commit}] ->
+          revealed_commit = %{commit | answer: answer, salt: salt, revealed_at: DateTime.utc_now()}
+          revealed_commit =
+            if commit_hash_valid?(revealed_commit) do
+              revealed_commit
+            else
+              %{revealed_commit | is_valid: false, violation_reason: "hash_tampering"}
+            end
 
-    commit
-    |> AnswerCommit.reveal_changeset(%{
-      answer: answer,
-      salt: salt,
-      revealed_at: DateTime.utc_now()
-    })
-    |> Repo.update()
-    |> case do
-      {:ok, revealed_commit} ->
-        if revealed_commit.is_valid do
-          create_event(revealed_commit.room_id, "answer_revealed", %{
-            player_id: revealed_commit.player_id,
-            round: revealed_commit.round,
-            is_valid: true
-          }, revealed_commit.player_id)
-          {:ok, revealed_commit}
-        else
-          {:error, :invalid_commit}
-        end
-      error -> error
+          list =
+            case :ets.lookup(:answer_commits_cache, {revealed_commit.room_id, revealed_commit.round}) do
+              [{_, existing}] -> existing
+              _ -> []
+            end
+          list = Enum.map(list, fn c -> if c.id == revealed_commit.id, do: revealed_commit, else: c end)
+          :ets.insert(:answer_commits_cache, {{revealed_commit.room_id, revealed_commit.round}, list})
+          :ets.insert(:answer_commits_cache, {revealed_commit.id, revealed_commit})
+
+          if revealed_commit.is_valid do
+            create_event(revealed_commit.room_id, "answer_revealed", %{
+              player_id: revealed_commit.player_id,
+              round: revealed_commit.round,
+              is_valid: true
+            }, revealed_commit.player_id)
+            {:ok, revealed_commit}
+          else
+            {:error, :invalid_commit}
+          end
+
+        _ ->
+          {:error, :not_found}
+      end
+    else
+      commit = Repo.get!(AnswerCommit, commit_id)
+
+      commit
+      |> AnswerCommit.reveal_changeset(%{
+        answer: answer,
+        salt: salt,
+        revealed_at: DateTime.utc_now()
+      })
+      |> Repo.update()
+      |> case do
+        {:ok, revealed_commit} ->
+          if revealed_commit.is_valid do
+            create_event(revealed_commit.room_id, "answer_revealed", %{
+              player_id: revealed_commit.player_id,
+              round: revealed_commit.round,
+              is_valid: true
+            }, revealed_commit.player_id)
+            {:ok, revealed_commit}
+          else
+            {:error, :invalid_commit}
+          end
+        error -> error
+      end
     end
   end
 
@@ -888,9 +1138,16 @@ end
   Gets all commits for a specific round in a room.
   """
   def get_round_commits(room_id, round) do
-    AnswerCommit
-    |> where([c], c.room_id == ^room_id and c.round == ^round)
-    |> Repo.all()
+    if cache_enabled?() do
+      case :ets.lookup(:answer_commits_cache, {room_id, round}) do
+        [{_, list}] -> list
+        _ -> []
+      end
+    else
+      AnswerCommit
+      |> where([c], c.room_id == ^room_id and c.round == ^round)
+      |> Repo.all()
+    end
   end
 
   # ============================================================================
@@ -901,22 +1158,30 @@ end
   Creates a snapshot of current game state.
   """
   def create_snapshot(room_id) do
-    room = get_room!(room_id) |> Repo.preload(:players)
-    current_seq = get_next_sequence_number(room_id) - 1
+    if cache_enabled?() do
+      {:ok, %Snapshot{}}
+    else
+      room = get_room!(room_id) |> Repo.preload(:players)
+      current_seq = get_next_sequence_number(room_id) - 1
 
-    Snapshot.create_snapshot(room, room.players, current_seq)
-    |> Repo.insert()
+      Snapshot.create_snapshot(room, room.players, current_seq)
+      |> Repo.insert()
+    end
   end
 
   @doc """
   Gets the latest snapshot for a room.
   """
   def get_latest_snapshot(room_id) do
-    Snapshot
-    |> where([s], s.room_id == ^room_id)
-    |> order_by([s], desc: s.seq)
-    |> limit(1)
-    |> Repo.one()
+    if cache_enabled?() do
+      nil
+    else
+      Snapshot
+      |> where([s], s.room_id == ^room_id)
+      |> order_by([s], desc: s.seq)
+      |> limit(1)
+      |> Repo.one()
+    end
   end
 
   defp cache_enabled? do

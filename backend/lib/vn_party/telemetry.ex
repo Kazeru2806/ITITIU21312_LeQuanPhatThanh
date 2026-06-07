@@ -8,7 +8,14 @@ defmodule VnParty.Telemetry do
   alias VnParty.Telemetry.LatencyMeasurement
 
   def record_latency(attrs) when is_map(attrs) do
-    insert_with_retry(attrs, 3)
+    if Application.get_env(:vn_party, :cache_enabled, true) do
+      room_id = Map.get(attrs, :room_id) || Map.get(attrs, "room_id") || Ecto.UUID.generate()
+      attrs = Map.put_new(attrs, :inserted_at, DateTime.utc_now())
+      :ets.insert(:latency_measurements_cache, {room_id, attrs})
+      {:ok, attrs}
+    else
+      insert_with_retry(attrs, 3)
+    end
   end
 
   defp insert_with_retry(_attrs, 0), do: {:error, :max_retries}

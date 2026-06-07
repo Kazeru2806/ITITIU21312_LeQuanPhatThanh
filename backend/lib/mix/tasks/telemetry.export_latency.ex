@@ -39,12 +39,29 @@ defmodule Mix.Tasks.Telemetry.ExportLatency do
     event = Keyword.get(opts, :event)
     out = Keyword.get(opts, :out, "latency_#{String.upcase(room_code)}.csv")
 
-    rows =
+    db_rows =
       LatencyMeasurement
       |> where([m], m.room_id == ^room.id)
       |> maybe_where_event(event)
       |> order_by([m], asc: m.inserted_at)
       |> Repo.all()
+
+    cached_rows =
+      case :ets.lookup(:latency_measurements_cache, room.id) do
+        [] -> []
+        list ->
+          list
+          |> Enum.map(fn {_, attrs} -> attrs end)
+          |> Enum.filter(fn r ->
+            is_nil(event) || event == "" || Map.get(r, :event) == event || Map.get(r, "event") == event
+          end)
+      end
+
+    rows =
+      (db_rows ++ cached_rows)
+      |> Enum.sort_by(fn r ->
+        Map.get(r, :inserted_at) || Map.get(r, "inserted_at")
+      end)
 
     csv = build_latency_csv(room.code, rows)
     File.write!(out, csv)
@@ -73,15 +90,15 @@ defmodule Mix.Tasks.Telemetry.ExportLatency do
       Enum.map(rows, fn r ->
         [
           room_code,
-          r.inserted_at |> to_string(),
-          r.event,
-          r.direction,
-          r.mode || "",
-          r.round || "",
-          r.player_id || "",
-          r.client_timestamp_ms || "",
-          r.server_received_timestamp_ms,
-          r.latency_ms || ""
+          (Map.get(r, :inserted_at) || Map.get(r, "inserted_at")) |> to_string(),
+          Map.get(r, :event) || Map.get(r, "event"),
+          Map.get(r, :direction) || Map.get(r, "direction"),
+          Map.get(r, :mode) || Map.get(r, "mode") || "",
+          Map.get(r, :round) || Map.get(r, "round") || "",
+          Map.get(r, :player_id) || Map.get(r, "player_id") || "",
+          Map.get(r, :client_timestamp_ms) || Map.get(r, "client_timestamp_ms") || "",
+          Map.get(r, :server_received_timestamp_ms) || Map.get(r, "server_received_timestamp_ms") || "",
+          Map.get(r, :latency_ms) || Map.get(r, "latency_ms") || ""
         ]
         |> Enum.map(&escape_csv/1)
         |> Enum.join(",")

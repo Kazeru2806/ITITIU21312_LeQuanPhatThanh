@@ -43,3 +43,5 @@ if config_env() == :prod do
       "https://vn-party-thesis-host-2bjn9x6y1-kazs-projects-a81dd6d8.vercel.app"
     ]
 end
+
+config :vn_party, :cache_enabled, config_env() != :test and System.get_env("CACHE_ENABLED") != "false"
