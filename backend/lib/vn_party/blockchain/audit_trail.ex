@@ -7,10 +7,14 @@ defmodule VnParty.Blockchain.AuditTrail do
   alias VnParty.Blockchain.EvmClient
 
   def on_event(event) do
-    if Application.get_env(:vn_party, :async_blockchain_anchoring, true) do
-      Task.start(fn -> anchor_event(event) end)
-    else
+    if cache_enabled?() do
       anchor_event(event)
+    else
+      if Application.get_env(:vn_party, :async_blockchain_anchoring, true) do
+        Task.start(fn -> anchor_event(event) end)
+      else
+        anchor_event(event)
+      end
     end
     :ok
   end

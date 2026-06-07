@@ -299,7 +299,7 @@ defmodule VnPartyWeb.GameChannel do
         metadata: meta
       }
 
-      Task.start(fn ->
+      if Game.cache_enabled?() do
         try do
           Telemetry.record_latency(attrs)
         rescue
@@ -307,7 +307,17 @@ defmodule VnPartyWeb.GameChannel do
             require Logger
             Logger.warning("latency measurement insert failed: #{inspect(e)}")
         end
-      end)
+      else
+        Task.start(fn ->
+          try do
+            Telemetry.record_latency(attrs)
+          rescue
+            e ->
+              require Logger
+              Logger.warning("latency measurement insert failed: #{inspect(e)}")
+          end
+        end)
+      end
     end
   end
 
