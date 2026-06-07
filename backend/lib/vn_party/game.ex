@@ -779,12 +779,14 @@ defmodule VnParty.Game do
         inserted_at: DateTime.utc_now()
       }
 
-      events =
-        case :ets.lookup(:room_events_cache, room_id) do
-          [{_, list}] -> list
-          _ -> []
-        end
-      :ets.insert(:room_events_cache, {room_id, events ++ [event]})
+      if Application.get_env(:vn_party, :event_cache_enabled, true) do
+        events =
+          case :ets.lookup(:room_events_cache, room_id) do
+            [{_, list}] -> list
+            _ -> []
+          end
+        :ets.insert(:room_events_cache, {room_id, events ++ [event]})
+      end
 
       AuditTrail.on_event(event)
       {:ok, event}
@@ -1205,7 +1207,7 @@ defmodule VnParty.Game do
 
   def cleanup_stale_rooms do
     now = DateTime.utc_now()
-    threshold = 120 # 2 minutes
+    threshold = Application.get_env(:vn_party, :stale_room_threshold_s, 60)
 
     stale_rooms =
       :ets.foldl(

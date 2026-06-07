@@ -45,3 +45,6 @@ if config_env() == :prod do
 end
 
 config :vn_party, :cache_enabled, config_env() != :test and System.get_env("CACHE_ENABLED") != "false"
+config :vn_party, :telemetry_cache_enabled, System.get_env("TELEMETRY_CACHE_ENABLED") != "false"
+config :vn_party, :event_cache_enabled, System.get_env("EVENT_CACHE_ENABLED") != "false"
+config :vn_party, :stale_room_threshold_s, String.to_integer(System.get_env("STALE_ROOM_THRESHOLD_S") || "60")

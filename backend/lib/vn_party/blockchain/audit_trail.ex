@@ -60,13 +60,15 @@ defmodule VnParty.Blockchain.AuditTrail do
         updated_at: DateTime.utc_now()
       }
 
-      anchors =
-        case :ets.lookup(:blockchain_anchor_cache, room_id) do
-          [{_, list}] -> list
-          _ -> []
-        end
+      if Application.get_env(:vn_party, :event_cache_enabled, true) do
+        anchors =
+          case :ets.lookup(:blockchain_anchor_cache, room_id) do
+            [{_, list}] -> list
+            _ -> []
+          end
 
-      :ets.insert(:blockchain_anchor_cache, {room_id, anchors ++ [anchor]})
+        :ets.insert(:blockchain_anchor_cache, {room_id, anchors ++ [anchor]})
+      end
       {:ok, anchor}
     else
       with {:ok, anchor} <-
