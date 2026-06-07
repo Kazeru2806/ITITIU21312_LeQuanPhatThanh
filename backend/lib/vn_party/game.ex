@@ -139,7 +139,7 @@ defmodule VnParty.Game do
   """
   def update_room_state(room, new_state) do
     if cache_enabled?() do
-      updated_room = %{room | state: new_state}
+      updated_room = %{room | state: new_state, updated_at: DateTime.utc_now()}
       :ets.insert(:room_cache, {updated_room.code, updated_room})
       :ets.insert(:room_cache, {updated_room.id, updated_room})
       create_event(room.id, "state_changed", %{
@@ -168,7 +168,7 @@ defmodule VnParty.Game do
   """
   def advance_round(room) do
     if cache_enabled?() do
-      updated_room = %{room | current_round: room.current_round + 1}
+      updated_room = %{room | current_round: room.current_round + 1, updated_at: DateTime.utc_now()}
       :ets.insert(:room_cache, {updated_room.code, updated_room})
       :ets.insert(:room_cache, {updated_room.id, updated_room})
       create_event(room.id, "round_started", %{round: updated_room.current_round})
@@ -193,7 +193,7 @@ defmodule VnParty.Game do
     room = get_room!(room_id)
 
     if cache_enabled?() do
-      updated_room = %{room | state: "round_start", current_round: 1, started_at: DateTime.utc_now()}
+      updated_room = %{room | state: "round_start", current_round: 1, started_at: DateTime.utc_now(), updated_at: DateTime.utc_now()}
       :ets.insert(:room_cache, {updated_room.code, updated_room})
       :ets.insert(:room_cache, {updated_room.id, updated_room})
       create_event(room.id, "game_started", %{})
@@ -1225,54 +1225,52 @@ defmodule VnParty.Game do
       )
 
     Enum.each(stale_rooms, fn room ->
-      # Delete from room_cache
-      :ets.delete(:room_cache, room.code)
-      :ets.delete(:room_cache, room.id)
-
-      # Get room players
+      # Get room players first before deleting room_players_cache
       players =
         case :ets.lookup(:room_players_cache, room.id) do
           [{_, list}] -> list
           _ -> []
         end
 
-      # Delete from room_players_cache
+      # 1. Delete room entries
+      :ets.delete(:room_cache, room.code)
+      :ets.delete(:room_cache, room.id)
       :ets.delete(:room_players_cache, room.id)
+      :ets.delete(:room_events_cache, room.id)
+      :ets.delete(:blockchain_anchor_cache, room.id)
+      :ets.delete(:room_chain_hash, room.id)
+      :ets.delete(:room_event_seq, room.id)
+      :ets.delete(:latency_measurements_cache, room.id)
+      :ets.delete(:force_end_pending, room.id)
+      :ets.delete(:rematch_votes, room.id)
+      :ets.delete(:rematch_declined, room.id)
 
-      # Delete players in player_cache
+      # 2. Delete players in player-scoped caches
       Enum.each(players, fn p ->
         :ets.delete(:player_cache, p.id)
         :ets.delete(:player_absent, p.id)
         :ets.delete(:player_round_skip, p.id)
         :ets.delete(:player_connection_cache, p.id)
-        :ets.delete(:rematch_votes, p.id)
-        :ets.delete(:rematch_declined, p.id)
         :ets.delete(:truth_player_stats, p.id)
-        :ets.delete(:distortion_usage, p.id)
+        :ets.delete(:pending_disconnect, p.id)
       end)
 
-      # Delete events from room_events_cache
-      :ets.delete(:room_events_cache, room.id)
+      # 3. Clean up round/player combination tables via match_delete
+      :ets.match_delete(:truth_predictions, {{room.id, :_, :_}, :_})
+      :ets.match_delete(:truth_results_ack, {{room.id, :_, :_}, :_})
+      :ets.match_delete(:truth_fake_locks, {{room.id, :_, :_}, :_})
+      :ets.match_delete(:truth_discussion_ack, {{room.id, :_, :_}, :_})
+      :ets.match_delete(:pending_answers, {{room.id, :_, :_}, :_})
+      :ets.match_delete(:distortion_usage, {{room.id, :_, :_}, :_})
 
-      # Delete anchors from blockchain_anchor_cache
-      :ets.delete(:blockchain_anchor_cache, room.id)
+      # 4. Clean up round-level tables via match_delete
+      :ets.match_delete(:round_scored, {{room.id, :_}, :_})
+      :ets.match_delete(:truth_round_data, {{room.id, :_}, :_})
+      :ets.match_delete(:truth_inject_preview, {{room.id, :_}, :_})
+      :ets.match_delete(:commit_windows, {{room.id, :_}, :_})
+      :ets.match_delete(:answer_commits_cache, {{room.id, :_}, :_})
 
-      # Delete chain hash
-      :ets.delete(:room_chain_hash, room.id)
-
-      # Delete room event seq
-      :ets.delete(:room_event_seq, room.id)
-
-      # Delete classic round commits and windows
-      Enum.each(1..8, fn round ->
-        :ets.delete(:commit_windows, {room.id, round})
-        :ets.delete(:answer_commits_cache, {room.id, round})
-      end)
-
-      # Delete from latency_measurements_cache
-      :ets.delete(:latency_measurements_cache, room.id)
-
-      # Delete truth collapse tables
+      # 5. Clean up other room-level tables
       :ets.delete(:truth_distortions, room.id)
       :ets.delete(:truth_active_category, room.id)
       :ets.delete(:truth_room_phase, room.id)
@@ -1281,19 +1279,6 @@ defmodule VnParty.Game do
       :ets.delete(:truth_answering_mono, room.id)
       :ets.delete(:truth_question_history, room.id)
       :ets.delete(:rematch_snapshot, room.id)
-
-      Enum.each(1..8, fn round ->
-        :ets.delete(:round_scored, {room.id, round})
-        :ets.delete(:truth_round_data, {room.id, round})
-        :ets.delete(:truth_inject_preview, {room.id, round})
-
-        Enum.each(players, fn p ->
-          :ets.delete(:truth_predictions, {room.id, round, p.id})
-          :ets.delete(:truth_results_ack, {room.id, round, p.id})
-          :ets.delete(:truth_fake_locks, {room.id, round, p.id})
-          :ets.delete(:truth_discussion_ack, {room.id, round, p.id})
-        end)
-      end)
     end)
   end
 end
