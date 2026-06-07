@@ -23,6 +23,8 @@ export function LobbyPage() {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const onlineCount = players.filter((p) => p.connected).length;
+  const hostPlayer = players.find((p) => p.is_host);
+  const isHostDisconnected = hostPlayer && !hostPlayer.connected;
 
   const refreshPlayers = async () => {
     const code = useDisplayStore.getState().roomCode;
@@ -174,6 +176,12 @@ export function LobbyPage() {
               {connected ? 'Màn hình đã kết nối' : 'Đang kết nối màn hình…'}
             </span>
           </div>
+
+          {isHostDisconnected && (
+            <div className="mb-6 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-2xl text-yellow-800 text-center font-bold animate-pulse shadow-md">
+              ⚠️ Chủ phòng ({hostPlayer.nickname}) đã ngắt kết nối! Quyền chủ phòng sẽ được tự động chuyển giao sau 45 giây nếu họ không quay lại.
+            </div>
+          )}
 
           <h2
             className="text-2xl font-black mb-4 text-center"

@@ -28,6 +28,7 @@ defmodule VnPartyWeb.GameChannel do
 
         case Game.get_player(player_id) do
           %VnParty.Game.Player{room_id: rid} when rid == room.id ->
+            VnParty.PresenceScheduler.cancel(player_id)
             Presence.mark_connected(player_id)
 
             PubSub.subscribe(VnParty.PubSub, "room:#{room.id}:internal")
@@ -1279,18 +1280,22 @@ defmodule VnPartyWeb.GameChannel do
       PubSub.unsubscribe(VnParty.PubSub, "room:#{socket.assigns.room_id}:internal")
     end
 
-    if socket.assigns[:player_id] && socket.assigns[:room_code] &&
-         should_remove_player_on_disconnect?(reason, socket) do
+    if socket.assigns[:player_id] && socket.assigns[:room_code] do
       room_id = socket.assigns.room_id
       player_id = socket.assigns.player_id
       room_code = socket.assigns.room_code
-      room = Game.get_room!(room_id)
 
-      if room.state not in ["lobby", "game_end"] do
-        Game.mark_skip_next_round(room_id, player_id)
+      if should_remove_player_on_disconnect?(reason, socket) do
+        room = Game.get_room!(room_id)
+
+        if room.state not in ["lobby", "game_end"] do
+          Game.mark_skip_next_round(room_id, player_id)
+        end
+
+        Game.player_left(player_id, room_code)
+      else
+        VnParty.PresenceScheduler.schedule_disconnect(player_id, room_id, room_code)
       end
-
-      Game.player_left(player_id, room_code)
     end
 
     maybe_register_rematch_disconnect_vote(socket)

@@ -42,6 +42,7 @@ defmodule VnParty.Application do
     :ets.new(:blockchain_anchor_cache, [:set, :public, :named_table])
     :ets.new(:answer_commits_cache, [:set, :public, :named_table])
     :ets.new(:latency_measurements_cache, [:bag, :public, :named_table])
+    :ets.new(:pending_disconnect, [:set, :public, :named_table])
 
 
 
@@ -66,6 +67,8 @@ defmodule VnParty.Application do
       VnParty.Repo,
       {DNSCluster, query: Application.get_env(:vn_party, :dns_cluster_query) || :ignore},
       pubsub_child,
+      VnParty.PresenceScheduler,
+      VnParty.CacheSweeper,
       # Start a worker by calling: VnParty.Worker.start_link(arg)
       # {VnParty.Worker, arg},
       # Start to serve requests, typically the last entry

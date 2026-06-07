@@ -18,7 +18,6 @@ defmodule VnParty.Game do
     """
 
   def create_room(attrs \\ %{}) do
-    if cache_enabled?(), do: Task.start(fn -> cleanup_stale_rooms() end)
     code = Room.generate_code()
 
     attrs = Map.new(attrs, fn {k, v} -> {to_string(k), v} end)
@@ -1204,23 +1203,26 @@ defmodule VnParty.Game do
     player
   end
 
-  defp cleanup_stale_rooms do
+  def cleanup_stale_rooms do
     now = DateTime.utc_now()
     threshold = 120 # 2 minutes
 
     stale_rooms =
-      case :ets.tab2list(:room_cache) do
-        [] -> []
-        list ->
-          list
-          |> Enum.filter(fn {key, room} ->
-            is_struct(room, Room) and key == room.id
-          end)
-          |> Enum.map(fn {_, room} -> room end)
-          |> Enum.filter(fn room ->
-            DateTime.diff(now, room.updated_at || room.inserted_at) > threshold
-          end)
-      end
+      :ets.foldl(
+        fn {key, room}, acc ->
+          if is_struct(room, Room) and key == room.id do
+            if DateTime.diff(now, room.updated_at || room.inserted_at) > threshold do
+              [room | acc]
+            else
+              acc
+            end
+          else
+            acc
+          end
+        end,
+        [],
+        :room_cache
+      )
 
     Enum.each(stale_rooms, fn room ->
       # Delete from room_cache
