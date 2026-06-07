@@ -44,6 +44,7 @@ export const options = {
         { duration: "5m", target: 400 },
         { duration: "2m", target: 0   },
       ],
+      gracefulRampDown: "75s",
       gracefulStop: "75s",
     },
   },

@@ -42,6 +42,10 @@ def create_room(attrs \\ %{}) do
     {:ok, room} ->
       # Log room creation event
       create_event(room.id, "room_created", %{code: code})
+      if cache_enabled?() do
+        :ets.insert(:room_cache, {room.code, room})
+        :ets.insert(:room_cache, {room.id, room})
+      end
       {:ok, room}
     error -> error
   end
@@ -58,22 +62,65 @@ end
   @doc """
   Gets a room by ID. Raises if not found.
   """
-  def get_room!(id), do: Repo.get!(Room, id)
+  def get_room!(id) do
+    if cache_enabled?() do
+      case :ets.lookup(:room_cache, id) do
+        [{_, room}] -> room
+        _ ->
+          room = Repo.get!(Room, id)
+          :ets.insert(:room_cache, {id, room})
+          :ets.insert(:room_cache, {room.code, room})
+          room
+      end
+    else
+      Repo.get!(Room, id)
+    end
+  end
 
   @doc """
   Gets a room by code. Returns nil if not found.
   """
   def get_room_by_code(code) do
-    Repo.get_by(Room, code: String.upcase(code))
+    code_up = String.upcase(code)
+    if cache_enabled?() do
+      case :ets.lookup(:room_cache, code_up) do
+        [{_, room}] -> room
+        _ ->
+          case Repo.get_by(Room, code: code_up) do
+            nil -> nil
+            room ->
+              :ets.insert(:room_cache, {code_up, room})
+              :ets.insert(:room_cache, {room.id, room})
+              room
+          end
+      end
+    else
+      Repo.get_by(Room, code: code_up)
+    end
   end
 
   @doc """
   Gets a room by code with players preloaded.
   """
   def get_room_by_code_with_players(code) do
-    case get_room_by_code(code) do
-      nil -> nil
-      room -> Repo.preload(room, :players)
+    code_up = String.upcase(code)
+    if cache_enabled?() do
+      case :ets.lookup(:room_cache, {:preloaded, code_up}) do
+        [{_, room}] -> room
+        _ ->
+          case get_room_by_code(code_up) do
+            nil -> nil
+            room ->
+              preloaded = Repo.preload(room, :players)
+              :ets.insert(:room_cache, {{:preloaded, code_up}, preloaded})
+              preloaded
+          end
+      end
+    else
+      case get_room_by_code(code_up) do
+        nil -> nil
+        room -> Repo.preload(room, :players)
+      end
     end
   end
 
@@ -90,6 +137,11 @@ end
           old_state: room.state,
           new_state: new_state
         })
+        if cache_enabled?() do
+          :ets.insert(:room_cache, {updated_room.code, updated_room})
+          :ets.insert(:room_cache, {updated_room.id, updated_room})
+          :ets.delete(:room_cache, {:preloaded, updated_room.code})
+        end
         {:ok, updated_room}
       error -> error
     end
@@ -105,6 +157,11 @@ end
     |> case do
       {:ok, updated_room} ->
         create_event(room.id, "round_started", %{round: updated_room.current_round})
+        if cache_enabled?() do
+          :ets.insert(:room_cache, {updated_room.code, updated_room})
+          :ets.insert(:room_cache, {updated_room.id, updated_room})
+          :ets.delete(:room_cache, {:preloaded, updated_room.code})
+        end
         {:ok, updated_room}
       error -> error
     end
@@ -150,6 +207,9 @@ end
             nickname: nickname
           }, player.id)
 
+          if cache_enabled?() do
+            :ets.delete(:room_cache, {:preloaded, String.upcase(room_code)})
+          end
           {:ok, player}
 
         {:error, _} = err ->
@@ -167,6 +227,9 @@ end
               nickname: nickname
             }, player.id)
 
+            if cache_enabled?() do
+              :ets.delete(:room_cache, {:preloaded, String.upcase(room_code)})
+            end
             {:ok, player}
           end
           end
@@ -197,8 +260,16 @@ end
           case player
                |> Player.changeset(%{nickname: nickname, connected: true})
                |> Repo.update() do
-            {:ok, updated} -> {:ok, updated}
-            {:error, _} -> {:ok, player}
+            {:ok, updated} ->
+              if cache_enabled?() do
+                :ets.insert(:player_cache, {updated.id, updated})
+              end
+              {:ok, updated}
+            {:error, _} ->
+              if cache_enabled?() do
+                :ets.insert(:player_cache, {player.id, player})
+              end
+              {:ok, player}
           end
         end
 
@@ -288,14 +359,49 @@ end
     %Player{}
     |> Player.changeset(attrs)
     |> Repo.insert()
+    |> case do
+      {:ok, player} ->
+        if cache_enabled?() do
+          :ets.insert(:player_cache, {player.id, player})
+        end
+        {:ok, player}
+      error -> error
+    end
   end
 
   @doc """
   Gets a player by ID.
   """
-  def get_player!(id), do: Repo.get!(Player, id)
+  def get_player!(id) do
+    if cache_enabled?() do
+      case :ets.lookup(:player_cache, id) do
+        [{_, player}] -> player
+        _ ->
+          player = Repo.get!(Player, id)
+          :ets.insert(:player_cache, {id, player})
+          player
+      end
+    else
+      Repo.get!(Player, id)
+    end
+  end
 
-  def get_player(id), do: Repo.get(Player, id)
+  def get_player(id) do
+    if cache_enabled?() do
+      case :ets.lookup(:player_cache, id) do
+        [{_, player}] -> player
+        _ ->
+          case Repo.get(Player, id) do
+            nil -> nil
+            player ->
+              :ets.insert(:player_cache, {id, player})
+              player
+          end
+      end
+    else
+      Repo.get(Player, id)
+    end
+  end
 
   @doc """
   Lists all players in a room.
@@ -325,6 +431,14 @@ end
     player
     |> Player.update_connection_changeset(connected)
     |> Repo.update()
+    |> case do
+      {:ok, updated} ->
+        if cache_enabled?() do
+          :ets.insert(:player_cache, {updated.id, updated})
+        end
+        {:ok, updated}
+      error -> error
+    end
   end
 
   @doc """
@@ -769,5 +883,9 @@ end
     |> order_by([s], desc: s.seq)
     |> limit(1)
     |> Repo.one()
+  end
+
+  defp cache_enabled? do
+    Application.get_env(:vn_party, :cache_enabled, true)
   end
 end

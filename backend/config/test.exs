@@ -42,3 +42,7 @@ config :phoenix,
 
 # Disable async blockchain anchoring in test to avoid sandbox connection issues
 config :vn_party, :async_blockchain_anchoring, false
+
+# Disable ETS caching in test to avoid sandbox isolation pollution
+config :vn_party, :cache_enabled, false
+

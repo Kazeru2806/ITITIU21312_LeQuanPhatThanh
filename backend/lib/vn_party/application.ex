@@ -35,6 +35,9 @@ defmodule VnParty.Application do
     :ets.new(:player_connection_cache, [:set, :public, :named_table])
     :ets.new(:room_event_seq, [:set, :public, :named_table])
     :ets.new(:room_chain_hash, [:set, :public, :named_table])
+    :ets.new(:room_cache, [:set, :public, :named_table])
+    :ets.new(:player_cache, [:set, :public, :named_table])
+
 
     pubsub_child =
       case System.get_env("REDIS_URL") do
