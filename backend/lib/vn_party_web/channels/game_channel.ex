@@ -240,11 +240,11 @@ defmodule VnPartyWeb.GameChannel do
         IO.puts("📋 Commit player IDs: #{inspect(Enum.map(commits, & &1.player_id))}")
         IO.puts("👥 Connected player IDs: #{inspect(Enum.map(connected_players, & &1.id))}")
 
-        # Check if ALL connected players have committed (not just count, but actual player IDs)
+        # Check if ALL connected players have committed (subset check allows reconnected players/skips gracefully)
         connected_player_ids = MapSet.new(Enum.map(connected_players, & &1.id))
         committed_player_ids = MapSet.new(Enum.map(commits, & &1.player_id))
 
-        all_committed = MapSet.equal?(connected_player_ids, committed_player_ids) and MapSet.size(connected_player_ids) > 0
+        all_committed = MapSet.subset?(connected_player_ids, committed_player_ids) and MapSet.size(connected_player_ids) > 0
 
         if all_committed do
           schedule_auto_reveal_if_needed(room_id, room.current_round, question_id, socket)
@@ -1318,16 +1318,10 @@ defmodule VnPartyWeb.GameChannel do
     :ok
   end
 
-  defp should_remove_player_on_disconnect?(reason, socket) do
-    if socket.assigns[:left_voluntarily], do: false
-
-    case reason do
-      :normal -> false
-      {:shutdown, :left} -> false
-      {:shutdown, :nominate} -> false
-      {:shutdown, _} -> false
-      _ -> true
-    end
+  defp should_remove_player_on_disconnect?(_reason, _socket) do
+    # Always debounce transient disconnections using PresenceScheduler (45s grace period)
+    # to allow reloads/reconnections.
+    false
   end
 
   defp build_join_response(room, game_state) do
@@ -1419,7 +1413,7 @@ defmodule VnPartyWeb.GameChannel do
 
     all_committed =
       MapSet.size(connected_player_ids) > 0 and
-        MapSet.equal?(connected_player_ids, committed_player_ids)
+        MapSet.subset?(connected_player_ids, committed_player_ids)
 
     if all_committed do
       auto_reveal_key = {:auto_reveal_scheduled, room_id, round}
@@ -2982,8 +2976,12 @@ defmodule VnPartyWeb.GameChannel do
 
           letters = Enum.map(0..(@min_truth_options - 1), fn j -> <<?A + j>> end)
 
+          correct_choice = hd(choices)
+          distractors = category_distractor_texts(cat, prompt, @min_truth_options)
+          combined = [correct_choice | Enum.reject(distractors, &(&1 == correct_choice))]
+
           options =
-            Enum.zip(letters, choices ++ category_distractor_texts(cat, prompt, @min_truth_options))
+            Enum.zip(letters, combined)
             |> Enum.take(@min_truth_options)
             |> Enum.map(fn {id, text} -> %{id: id, text: text} end)
 
