@@ -24,22 +24,29 @@ function assertProductionTargets() {
 assertProductionTargets();
 const minPlayers = Number(__ENV.MIN_PLAYERS || "4");
 const maxPlayers = Number(__ENV.MAX_PLAYERS || "8");
+const sessionDurationMs = Number(__ENV.SESSION_DURATION_MS || "60000");
 
 export const latencyMs = new Trend("s2c_question_revealed_latency_ms", true);
 export const errorRate = new Rate("h2_errors");
 
 export const options = {
-  stages: [
-    { duration: "2m", target: 50 },
-    { duration: "5m", target: 50 },
-    { duration: "2m", target: 100 },
-    { duration: "5m", target: 100 },
-    { duration: "2m", target: 250 },
-    { duration: "5m", target: 250 },
-    { duration: "3m", target: 500 },
-    { duration: "5m", target: 500 },
-    { duration: "2m", target: 0 },
-  ],
+  scenarios: {
+    default: {
+      executor: "ramping-vus",
+      stages: [
+        { duration: "2m", target: 50 },
+        { duration: "5m", target: 50 },
+        { duration: "2m", target: 100 },
+        { duration: "5m", target: 100 },
+        { duration: "2m", target: 250 },
+        { duration: "5m", target: 250 },
+        { duration: "3m", target: 500 },
+        { duration: "5m", target: 500 },
+        { duration: "2m", target: 0 },
+      ],
+      gracefulStop: "75s",
+    },
+  },
   thresholds: {
     h2_errors: ["rate<0.01"],
     s2c_question_revealed_latency_ms: ["p(95)<=300"],
@@ -60,8 +67,9 @@ function createRoom() {
 }
 
 function joinRoom(roomCode, nickname) {
+  // Use http.url template tag to group dynamic roomCode metrics and prevent memory leaks/high-cardinality bloat
   const res = http.post(
-    `${apiBase}/rooms/${roomCode}/join`,
+    http.url`${apiBase}/rooms/${roomCode}/join`,
     JSON.stringify({ nickname }),
     { headers: { "Content-Type": "application/json" } }
   );
@@ -75,6 +83,7 @@ export default function () {
   const roomCode = createRoom();
   if (!roomCode) {
     errorRate.add(true);
+    sleep(5); // Prevent tight failure loop
     return;
   }
 
@@ -84,6 +93,7 @@ export default function () {
     const p = joinRoom(roomCode, `k6_${__VU}_${i}`);
     if (!p || !p.id) {
       errorRate.add(true);
+      sleep(5); // Prevent tight failure loop
       return;
     }
     players.push(p);
@@ -114,6 +124,19 @@ export default function () {
         console.log(`Error sending phx_join: ${err}`);
       }
 
+      // Send heartbeats every 30 seconds to keep the Phoenix channel connection alive
+      socket.heartbeatInterval = setInterval(() => {
+        try {
+          if (socket.readyState === 1) {
+            socket.send(JSON.stringify([
+              null, "heartbeat_ref", "phoenix", "heartbeat", {}
+            ]));
+          }
+        } catch (err) {
+          // ignore
+        }
+      }, 30000);
+
       if (isHost) {
         setTimeout(() => {
           try {
@@ -122,8 +145,6 @@ export default function () {
                 "1", "99", topic, "start_game",
                 { client_timestamp_ms: Date.now() }
               ]));
-            } else {
-              console.log(`Host socket state is not open (readyState=${socket.readyState}) when trying to start game`);
             }
           } catch (err) {
             console.log(`Error sending start_game: ${err}`);
@@ -149,22 +170,31 @@ export default function () {
       }
     };
 
-    socket.onerror = (e) => {
-      console.log(`Socket error: ${e.message || JSON.stringify(e)}`);
+    socket.onerror = () => {
+      if (socket.heartbeatInterval) {
+        clearInterval(socket.heartbeatInterval);
+      }
     };
 
-    socket.onclose = () => {};
+    socket.onclose = () => {
+      if (socket.heartbeatInterval) {
+        clearInterval(socket.heartbeatInterval);
+      }
+    };
   }
 
-  // Wait 8 seconds asynchronously for game-start and question-revealed events, then cleanup
+  // Wait asynchronously for game-start and question-revealed events, then cleanup
   setTimeout(() => {
     for (const s of sockets) {
       try {
+        if (s.heartbeatInterval) {
+          clearInterval(s.heartbeatInterval);
+        }
         s.close();
       } catch (err) {
         // ignore
       }
     }
     errorRate.add(gotQuestion ? 0 : 1);
-  }, 13000);
+  }, sessionDurationMs);
 }

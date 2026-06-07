@@ -275,18 +275,16 @@ defmodule VnPartyWeb.GameChannel do
       room_id = socket.assigns[:room_id]
       player_id = socket.assigns[:player_id]
 
-      mode =
-        try do
-          room_id && Game.get_room!(room_id) |> Game.room_mode()
-        rescue
-          _ -> nil
-        end
+      mode = socket.assigns[:room_mode]
 
       round =
-        try do
-          if room_id, do: Game.get_room!(room_id).current_round, else: nil
-        rescue
-          _ -> nil
+        case room_id do
+          nil -> nil
+          rid ->
+            case :ets.lookup(:truth_room_phase, rid) do
+              [{_, %{round: r}}] -> r
+              _ -> nil
+            end
         end
 
       attrs = %{

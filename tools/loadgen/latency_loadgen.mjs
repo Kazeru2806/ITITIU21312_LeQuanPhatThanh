@@ -112,7 +112,7 @@ async function run() {
         .push("submit_prediction", {
           option_id,
           client_timestamp_ms: Date.now(),
-        })
+        }, 5000) // Explicit 5-second push timeout (preventing 120s socket timeout default)
         .receive("ok", () => resolve())
         .receive("error", (e) => reject(new Error(e?.reason || "submit_prediction error")))
         .receive("timeout", () => reject(new Error("submit_prediction timeout")));

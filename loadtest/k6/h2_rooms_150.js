@@ -5,27 +5,46 @@ import { Trend, Rate } from "k6/metrics";
 
 const apiBase = __ENV.API_BASE || "";
 const wsBase = __ENV.WS_BASE || "";
+const allowLocal = __ENV.ALLOW_LOCALHOST === "1";
 
-if (!apiBase || !wsBase) {
-  throw new Error("API_BASE and WS_BASE are required.");
+function assertProductionTargets() {
+  if (!apiBase || !wsBase) {
+    throw new Error(
+      "H2 requires API_BASE and WS_BASE (Render production URLs). Example: API_BASE=https://your-app.onrender.com/api WS_BASE=wss://your-app.onrender.com/socket/websocket"
+    );
+  }
+  const local = /127\.0\.0\.1|localhost/i.test(apiBase) || /127\.0\.0\.1|localhost/i.test(wsBase);
+  if (local && !allowLocal) {
+    throw new Error(
+      "H2 thesis runs must target deployed backend, not localhost. Set ALLOW_LOCALHOST=1 only for dev smoke tests."
+    );
+  }
 }
 
+assertProductionTargets();
 const minPlayers = Number(__ENV.MIN_PLAYERS || "4");
 const maxPlayers = Number(__ENV.MAX_PLAYERS || "8");
+const sessionDurationMs = Number(__ENV.SESSION_DURATION_MS || "60000");
 
 export const latencyMs = new Trend("s2c_question_revealed_latency_ms", true);
 export const errorRate = new Rate("h2_errors");
 
 export const options = {
-  stages: [
-    { duration: "2m", target: 50  },
-    { duration: "5m", target: 50  },
-    { duration: "2m", target: 100 },
-    { duration: "5m", target: 100 },
-    { duration: "2m", target: 150 },
-    { duration: "5m", target: 150 },
-    { duration: "2m", target: 0   },
-  ],
+  scenarios: {
+    default: {
+      executor: "ramping-vus",
+      stages: [
+        { duration: "2m", target: 50  },
+        { duration: "5m", target: 50  },
+        { duration: "2m", target: 100 },
+        { duration: "5m", target: 100 },
+        { duration: "2m", target: 150 },
+        { duration: "5m", target: 150 },
+        { duration: "2m", target: 0   },
+      ],
+      gracefulStop: "75s",
+    },
+  },
   thresholds: {
     h2_errors: ["rate<0.01"],
     s2c_question_revealed_latency_ms: ["p(95)<=300"],
@@ -46,8 +65,9 @@ function createRoom() {
 }
 
 function joinRoom(roomCode, nickname) {
+  // Use http.url template tag to group dynamic roomCode metrics and prevent memory leaks/high-cardinality bloat
   const res = http.post(
-    `${apiBase}/rooms/${roomCode}/join`,
+    http.url`${apiBase}/rooms/${roomCode}/join`,
     JSON.stringify({ nickname }),
     { headers: { "Content-Type": "application/json" } }
   );
@@ -59,13 +79,21 @@ function joinRoom(roomCode, nickname) {
 
 export default function () {
   const roomCode = createRoom();
-  if (!roomCode) return;
+  if (!roomCode) {
+    errorRate.add(true);
+    sleep(5); // Prevent tight failure loop
+    return;
+  }
 
   const nPlayers = randInt(minPlayers, maxPlayers);
   const players = [];
   for (let i = 0; i < nPlayers; i++) {
     const p = joinRoom(roomCode, `k6_${__VU}_${i}`);
-    if (!p || !p.id) return;
+    if (!p || !p.id) {
+      errorRate.add(true);
+      sleep(5); // Prevent tight failure loop
+      return;
+    }
     players.push(p);
   }
 
@@ -73,7 +101,6 @@ export default function () {
   let questionLatencyDone = false;
 
   const sockets = [];
-  let hostSocket = null;
   const topic = `game:${roomCode}`;
 
   for (let i = 0; i < nPlayers; i++) {
@@ -84,25 +111,50 @@ export default function () {
 
     const socket = new WebSocket(`${wsBase}?vsn=2.0.0`);
     sockets.push(socket);
-    if (isHost) {
-      hostSocket = socket;
-    }
 
     socket.onopen = () => {
-      socket.send(JSON.stringify([
-        myJoinRef, myJoinRef, topic, "phx_join",
-        { nickname: nickname, player_id: p.id }
-      ]));
+      try {
+        socket.send(JSON.stringify([
+          myJoinRef, myJoinRef, topic, "phx_join",
+          { nickname: nickname, player_id: p.id }
+        ]));
+      } catch (err) {
+        console.log(`Error sending phx_join: ${err}`);
+      }
+
+      // Send heartbeats every 30 seconds to keep the Phoenix channel connection alive
+      socket.heartbeatInterval = setInterval(() => {
+        try {
+          if (socket.readyState === 1) {
+            socket.send(JSON.stringify([
+              null, "heartbeat_ref", "phoenix", "heartbeat", {}
+            ]));
+          }
+        } catch (err) {
+          // ignore
+        }
+      }, 30000);
+
+      if (isHost) {
+        setTimeout(() => {
+          try {
+            if (socket.readyState === 1) {
+              socket.send(JSON.stringify([
+                "1", "99", topic, "start_game",
+                { client_timestamp_ms: Date.now() }
+              ]));
+            }
+          } catch (err) {
+            console.log(`Error sending start_game: ${err}`);
+          }
+        }, 2000);
+      }
     };
 
     socket.onmessage = (e) => {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
       const [, , , event, payload] = msg;
-
-      if (event === "phx_reply" && payload?.status === "error" && isHost) {
-        return;
-      }
 
       if (event === "question_revealed" && !questionLatencyDone) {
         gotQuestion = true;
@@ -116,31 +168,31 @@ export default function () {
       }
     };
 
-    socket.onerror = () => {};
+    socket.onerror = () => {
+      if (socket.heartbeatInterval) {
+        clearInterval(socket.heartbeatInterval);
+      }
+    };
+
+    socket.onclose = () => {
+      if (socket.heartbeatInterval) {
+        clearInterval(socket.heartbeatInterval);
+      }
+    };
   }
 
-  // 1. Sleep to let all players connect and join
-  sleep(2);
-
-  // 2. Host sends start_game
-  if (hostSocket) {
-    hostSocket.send(JSON.stringify([
-      "1", "99", topic, "start_game",
-      { client_timestamp_ms: Date.now() }
-    ]));
-  }
-
-  // 3. Sleep to let the game start and question get revealed
-  sleep(6);
-
-  // 4. Close all sockets
-  for (const s of sockets) {
-    try {
-      s.close();
-    } catch (err) {
-      // ignore
+  // Wait asynchronously for game-start and question-revealed events, then cleanup
+  setTimeout(() => {
+    for (const s of sockets) {
+      try {
+        if (s.heartbeatInterval) {
+          clearInterval(s.heartbeatInterval);
+        }
+        s.close();
+      } catch (err) {
+        // ignore
+      }
     }
-  }
-
-  errorRate.add(gotQuestion ? 0 : 1);
+    errorRate.add(gotQuestion ? 0 : 1);
+  }, sessionDurationMs);
 }
