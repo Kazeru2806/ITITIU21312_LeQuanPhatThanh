@@ -212,9 +212,7 @@ defmodule VnPartyWeb.GameChannel do
 
         db_attrs = if store_plaintext?, do: Map.put(db_attrs, :answer, answer), else: db_attrs
 
-        commit
-        |> Ecto.Changeset.change(db_attrs)
-        |> Repo.update()
+        save_committed_answer(commit, db_attrs, room_id, room.current_round)
 
         # Broadcast that this player has committed (but not the answer!)
         player_committed_payload = %{
@@ -1654,9 +1652,7 @@ defmodule VnPartyWeb.GameChannel do
             points = if is_correct, do: 100, else: 0
 
             # Mark commit as scored
-            commit
-            |> AnswerCommit.score_changeset(is_correct, points)
-            |> Repo.update()
+            save_scored_commit(commit, is_correct, points, room_id, round)
 
             # Update player score only if correct
             if is_correct do
@@ -1709,9 +1705,7 @@ defmodule VnPartyWeb.GameChannel do
             is_correct = commit_text(commit) == question.correct
             points = if is_correct, do: 100, else: 0
 
-            commit
-            |> AnswerCommit.score_changeset(is_correct, points)
-            |> Repo.update()
+            save_scored_commit(commit, is_correct, points, room_id, round)
 
             if is_correct do
               Game.update_player_score(commit.player_id, points)
@@ -1781,9 +1775,7 @@ defmodule VnPartyWeb.GameChannel do
             points = if is_correct, do: 100, else: 0
 
             # Mark commit as scored
-            commit
-            |> AnswerCommit.score_changeset(is_correct, points)
-            |> Repo.update()
+            save_scored_commit(commit, is_correct, points, room_id, round)
 
             # Update player score only if correct
             if is_correct do
@@ -1836,9 +1828,7 @@ defmodule VnPartyWeb.GameChannel do
             is_correct = commit_text(commit) == question.correct
             points = if is_correct, do: 100, else: 0
 
-            commit
-            |> AnswerCommit.score_changeset(is_correct, points)
-            |> Repo.update()
+            save_scored_commit(commit, is_correct, points, room_id, round)
 
             if is_correct do
               Game.update_player_score(commit.player_id, points)
@@ -1876,34 +1866,57 @@ defmodule VnPartyWeb.GameChannel do
   end
 
   defp reset_room_for_rematch(room_id) do
-    # Reset room state
-    room = Game.get_room!(room_id)
+    if Game.cache_enabled?() do
+      # Reset room state
+      room = Game.get_room!(room_id)
+      updated_room = %{room | state: "lobby", current_round: 0, started_at: nil, updated_at: DateTime.utc_now()}
+      :ets.insert(:room_cache, {updated_room.code, updated_room})
+      :ets.insert(:room_cache, {updated_room.id, updated_room})
 
-    room
-    |> Ecto.Changeset.change(%{
-      state: "lobby",
-      current_round: 0,
-      started_at: nil
-    })
-    |> Repo.update()
+      # Reset all player scores
+      players = Game.list_players(room_id)
+      Enum.each(players, fn player ->
+        updated_player = %{player | score: 0, updated_at: DateTime.utc_now()}
+        :ets.insert(:player_cache, {player.id, updated_player})
+      end)
+      # Re-cache updated players in room_players_cache
+      reset_players = Enum.map(players, fn player -> %{player | score: 0} end)
+      :ets.insert(:room_players_cache, {room_id, reset_players})
 
-    # Reset all player scores
-    players = Game.list_players(room_id)
-    Enum.each(players, fn player ->
-      player
-      |> Ecto.Changeset.change(%{score: 0})
+      # Clean up all answer commits for this room
+      :ets.match_delete(:answer_commits_cache, {{room_id, :_}, :_})
+
+      clear_truth_runtime_for_new_game(room_id, players)
+    else
+      # Reset room state
+      room = Game.get_room!(room_id)
+
+      room
+      |> Ecto.Changeset.change(%{
+        state: "lobby",
+        current_round: 0,
+        started_at: nil
+      })
       |> Repo.update()
-    end)
 
-    # Clean up all answer commits for this room
-    import Ecto.Query
-    alias VnParty.Game.AnswerCommit
+      # Reset all player scores
+      players = Game.list_players(room_id)
+      Enum.each(players, fn player ->
+        player
+        |> Ecto.Changeset.change(%{score: 0})
+        |> Repo.update()
+      end)
 
-    AnswerCommit
-    |> where([c], c.room_id == ^room_id)
-    |> Repo.delete_all()
+      # Clean up all answer commits for this room
+      import Ecto.Query
+      alias VnParty.Game.AnswerCommit
 
-    clear_truth_runtime_for_new_game(room_id, players)
+      AnswerCommit
+      |> where([c], c.room_id == ^room_id)
+      |> Repo.delete_all()
+
+      clear_truth_runtime_for_new_game(room_id, players)
+    end
   end
 
   defp rematch_snapshot_ids(room_id) do
@@ -3111,5 +3124,43 @@ defmodule VnPartyWeb.GameChannel do
 
     index = rem(round - 1, length(questions))
     Enum.at(questions, index)
+  end
+
+  defp save_committed_answer(commit, db_attrs, room_id, round) do
+    if Game.cache_enabled?() do
+      updated = struct(commit, db_attrs)
+      list =
+        case :ets.lookup(:answer_commits_cache, {room_id, round}) do
+          [{_, existing}] -> existing
+          _ -> []
+        end
+      list = Enum.map(list, fn c -> if c.id == updated.id, do: updated, else: c end)
+      :ets.insert(:answer_commits_cache, {{room_id, round}, list})
+      :ets.insert(:answer_commits_cache, {updated.id, updated})
+      {:ok, updated}
+    else
+      commit
+      |> Ecto.Changeset.change(db_attrs)
+      |> Repo.update()
+    end
+  end
+
+  defp save_scored_commit(commit, is_correct, points, room_id, round) do
+    if Game.cache_enabled?() do
+      updated = %{commit | is_correct: is_correct, points_awarded: points}
+      list =
+        case :ets.lookup(:answer_commits_cache, {room_id, round}) do
+          [{_, existing}] -> existing
+          _ -> []
+        end
+      list = Enum.map(list, fn c -> if c.id == updated.id, do: updated, else: c end)
+      :ets.insert(:answer_commits_cache, {{room_id, round}, list})
+      :ets.insert(:answer_commits_cache, {updated.id, updated})
+      {:ok, updated}
+    else
+      commit
+      |> AnswerCommit.score_changeset(is_correct, points)
+      |> Repo.update()
+    end
   end
 end

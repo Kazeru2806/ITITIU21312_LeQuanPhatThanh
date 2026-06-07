@@ -1184,7 +1184,7 @@ defmodule VnParty.Game do
     end
   end
 
-  defp cache_enabled? do
+  def cache_enabled? do
     Application.get_env(:vn_party, :cache_enabled, true)
   end
 
