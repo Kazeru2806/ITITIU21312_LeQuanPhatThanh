@@ -80,12 +80,10 @@ defmodule VnParty.Game do
   def get_room!(id) do
     if cache_enabled?() do
       case :ets.lookup(:room_cache, id) do
-        [{_, room}] -> room
+        [{_, room}] -> cache_refresh_room(room)
         _ ->
           room = Repo.get!(Room, id)
-          :ets.insert(:room_cache, {id, room})
-          :ets.insert(:room_cache, {room.code, room})
-          room
+          cache_refresh_room(room)
       end
     else
       Repo.get!(Room, id)
@@ -99,14 +97,11 @@ defmodule VnParty.Game do
     code_up = String.upcase(code)
     if cache_enabled?() do
       case :ets.lookup(:room_cache, code_up) do
-        [{_, room}] -> room
+        [{_, room}] -> cache_refresh_room(room)
         _ ->
           case Repo.get_by(Room, code: code_up) do
             nil -> nil
-            room ->
-              :ets.insert(:room_cache, {code_up, room})
-              :ets.insert(:room_cache, {room.id, room})
-              room
+            room -> cache_refresh_room(room)
           end
       end
     else
@@ -1189,6 +1184,19 @@ defmodule VnParty.Game do
   def cache_enabled? do
     Application.get_env(:vn_party, :cache_enabled, true)
   end
+
+  defp cache_refresh_room(%Room{} = room) do
+    if cache_enabled?() do
+      updated_room = %{room | updated_at: DateTime.utc_now()}
+      :ets.insert(:room_cache, {updated_room.code, updated_room})
+      :ets.insert(:room_cache, {updated_room.id, updated_room})
+      updated_room
+    else
+      room
+    end
+  end
+
+  defp cache_refresh_room(other), do: other
 
   defp update_player_in_cache(player) do
     if cache_enabled?() do

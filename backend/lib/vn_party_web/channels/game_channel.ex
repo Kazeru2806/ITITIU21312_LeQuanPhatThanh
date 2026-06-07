@@ -324,6 +324,13 @@ defmodule VnPartyWeb.GameChannel do
   @impl true
   def handle_in("heartbeat", _payload, socket) do
     Presence.mark_connected(socket.assigns.player_id)
+    if room_id = socket.assigns[:room_id] do
+      try do
+        Game.get_room!(room_id)
+      rescue
+        _ -> :ok
+      end
+    end
     {:reply, {:ok, %{server_timestamp_ms: System.system_time(:millisecond)}}, socket}
   end
 
