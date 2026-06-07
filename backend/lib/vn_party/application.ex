@@ -37,6 +37,8 @@ defmodule VnParty.Application do
     :ets.new(:room_chain_hash, [:set, :public, :named_table])
     :ets.new(:room_cache, [:set, :public, :named_table])
     :ets.new(:player_cache, [:set, :public, :named_table])
+    :ets.new(:room_players_cache, [:set, :public, :named_table])
+
 
 
     pubsub_child =

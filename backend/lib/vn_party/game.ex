@@ -45,6 +45,7 @@ def create_room(attrs \\ %{}) do
       if cache_enabled?() do
         :ets.insert(:room_cache, {room.code, room})
         :ets.insert(:room_cache, {room.id, room})
+        :ets.insert(:room_players_cache, {room.id, []})
       end
       {:ok, room}
     error -> error
@@ -105,16 +106,11 @@ end
   def get_room_by_code_with_players(code) do
     code_up = String.upcase(code)
     if cache_enabled?() do
-      case :ets.lookup(:room_cache, {:preloaded, code_up}) do
-        [{_, room}] -> room
-        _ ->
-          case get_room_by_code(code_up) do
-            nil -> nil
-            room ->
-              preloaded = Repo.preload(room, :players)
-              :ets.insert(:room_cache, {{:preloaded, code_up}, preloaded})
-              preloaded
-          end
+      case get_room_by_code(code_up) do
+        nil -> nil
+        room ->
+          players = list_players(room.id)
+          %{room | players: players}
       end
     else
       case get_room_by_code(code_up) do
@@ -127,7 +123,7 @@ end
   @doc """
   Updates a room's state.
   """
-  def update_room_state(room, new_state) do
+    def update_room_state(room, new_state) do
     room
     |> Room.update_state_changeset(new_state)
     |> Repo.update()
@@ -140,7 +136,6 @@ end
         if cache_enabled?() do
           :ets.insert(:room_cache, {updated_room.code, updated_room})
           :ets.insert(:room_cache, {updated_room.id, updated_room})
-          :ets.delete(:room_cache, {:preloaded, updated_room.code})
         end
         {:ok, updated_room}
       error -> error
@@ -160,7 +155,6 @@ end
         if cache_enabled?() do
           :ets.insert(:room_cache, {updated_room.code, updated_room})
           :ets.insert(:room_cache, {updated_room.id, updated_room})
-          :ets.delete(:room_cache, {:preloaded, updated_room.code})
         end
         {:ok, updated_room}
       error -> error
@@ -183,6 +177,10 @@ end
     |> case do
       {:ok, updated_room} ->
         create_event(room.id, "game_started", %{})
+        if cache_enabled?() do
+          :ets.insert(:room_cache, {updated_room.code, updated_room})
+          :ets.insert(:room_cache, {updated_room.id, updated_room})
+        end
         {:ok, updated_room}
       error -> error
     end
@@ -206,10 +204,6 @@ end
             player_id: player.id,
             nickname: nickname
           }, player.id)
-
-          if cache_enabled?() do
-            :ets.delete(:room_cache, {:preloaded, String.upcase(room_code)})
-          end
           {:ok, player}
 
         {:error, _} = err ->
@@ -226,10 +220,6 @@ end
               player_id: player.id,
               nickname: nickname
             }, player.id)
-
-            if cache_enabled?() do
-              :ets.delete(:room_cache, {:preloaded, String.upcase(room_code)})
-            end
             {:ok, player}
           end
           end
@@ -249,7 +239,7 @@ end
   defp rejoin_player(_room, nil, _nickname), do: :not_rejoin
 
   defp rejoin_player(room, player_id, nickname) when is_binary(player_id) do
-    case Repo.get(Player, player_id) do
+    case get_player(player_id) do
       %Player{room_id: room_id, nickname: existing} when room_id == room.id ->
         if String.trim(existing) != String.trim(nickname) do
           {:error, :nickname_mismatch}
@@ -261,14 +251,10 @@ end
                |> Player.changeset(%{nickname: nickname, connected: true})
                |> Repo.update() do
             {:ok, updated} ->
-              if cache_enabled?() do
-                :ets.insert(:player_cache, {updated.id, updated})
-              end
+              update_player_in_cache(updated)
               {:ok, updated}
             {:error, _} ->
-              if cache_enabled?() do
-                :ets.insert(:player_cache, {player.id, player})
-              end
+              update_player_in_cache(player)
               {:ok, player}
           end
         end
@@ -361,9 +347,7 @@ end
     |> Repo.insert()
     |> case do
       {:ok, player} ->
-        if cache_enabled?() do
-          :ets.insert(:player_cache, {player.id, player})
-        end
+        update_player_in_cache(player)
         {:ok, player}
       error -> error
     end
@@ -407,19 +391,44 @@ end
   Lists all players in a room.
   """
   def list_players(room_id) do
-    Player
-    |> where([p], p.room_id == ^room_id)
-    |> order_by([p], desc: p.score, asc: p.joined_at)
-    |> Repo.all()
+    if cache_enabled?() do
+      case :ets.lookup(:room_players_cache, room_id) do
+        [{_, players}] ->
+          Enum.sort(players, fn p1, p2 ->
+            cond do
+              p1.score != p2.score -> p1.score > p2.score
+              true -> DateTime.compare(p1.joined_at, p2.joined_at) != :gt
+            end
+          end)
+        _ ->
+          players =
+            Player
+            |> where([p], p.room_id == ^room_id)
+            |> order_by([p], desc: p.score, asc: p.joined_at)
+            |> Repo.all()
+          :ets.insert(:room_players_cache, {room_id, players})
+          Enum.each(players, fn p -> :ets.insert(:player_cache, {p.id, p}) end)
+          players
+      end
+    else
+      Player
+      |> where([p], p.room_id == ^room_id)
+      |> order_by([p], desc: p.score, asc: p.joined_at)
+      |> Repo.all()
+    end
   end
 
   @doc """
   Counts players in a room.
   """
   def count_players_in_room(room_id) do
-    Player
-    |> where([p], p.room_id == ^room_id)
-    |> Repo.aggregate(:count)
+    if cache_enabled?() do
+      length(list_players(room_id))
+    else
+      Player
+      |> where([p], p.room_id == ^room_id)
+      |> Repo.aggregate(:count)
+    end
   end
 
   @doc """
@@ -433,9 +442,7 @@ end
     |> Repo.update()
     |> case do
       {:ok, updated} ->
-        if cache_enabled?() do
-          :ets.insert(:player_cache, {updated.id, updated})
-        end
+        update_player_in_cache(updated)
         {:ok, updated}
       error -> error
     end
@@ -473,7 +480,17 @@ end
       end
     end)
     |> case do
-      {:ok, host} -> {:ok, host}
+      {:ok, host} ->
+        if cache_enabled?() do
+          players =
+            Player
+            |> where([p], p.room_id == ^room_id)
+            |> order_by([p], desc: p.score, asc: p.joined_at)
+            |> Repo.all()
+          :ets.insert(:room_players_cache, {room_id, players})
+          Enum.each(players, fn p -> :ets.insert(:player_cache, {p.id, p}) end)
+        end
+        {:ok, host}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -487,6 +504,12 @@ end
     player
     |> Player.update_score_changeset(points)
     |> Repo.update()
+    |> case do
+      {:ok, updated} ->
+        update_player_in_cache(updated)
+        {:ok, updated}
+      error -> error
+    end
   end
 
   @doc """
@@ -500,6 +523,17 @@ end
       {:ok, deleted} ->
         :ets.delete(:player_absent, player_id)
         :ets.delete(:player_round_skip, player_id)
+
+        if cache_enabled?() do
+          :ets.delete(:player_cache, player_id)
+          players =
+            case :ets.lookup(:room_players_cache, room_id) do
+              [{_, list}] -> list
+              _ -> []
+            end
+          updated_players = Enum.reject(players, fn p -> p.id == player_id end)
+          :ets.insert(:room_players_cache, {room_id, updated_players})
+        end
 
         new_host =
           case ensure_connected_host(room_id) do
@@ -520,7 +554,7 @@ end
   Removes them from the lobby immediately and transfers host if needed.
   """
   def player_left(player_id, room_code) when is_binary(player_id) do
-    case Repo.get(Player, player_id) do
+    case get_player(player_id) do
       nil ->
         :ok
 
@@ -887,5 +921,20 @@ end
 
   defp cache_enabled? do
     Application.get_env(:vn_party, :cache_enabled, true)
+  end
+
+  defp update_player_in_cache(player) do
+    if cache_enabled?() do
+      :ets.insert(:player_cache, {player.id, player})
+      case :ets.lookup(:room_players_cache, player.room_id) do
+        [{_, list}] ->
+          updated_list = [player | Enum.reject(list, fn p -> p.id == player.id end)]
+          :ets.insert(:room_players_cache, {player.room_id, updated_list})
+        _ ->
+          # If not yet loaded, list_players will load and cache it on next call
+          :ok
+      end
+    end
+    player
   end
 end
