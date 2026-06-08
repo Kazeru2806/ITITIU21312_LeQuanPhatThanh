@@ -40,7 +40,8 @@ if config_env() == :prod do
     check_origin: [
       "https://vn-party-thesis.vercel.app",
       "https://vn-party-thesis-host.vercel.app",
-      "https://vn-party-thesis-host-2bjn9x6y1-kazs-projects-a81dd6d8.vercel.app"
+      "https://vn-party-thesis-host-2bjn9x6y1-kazs-projects-a81dd6d8.vercel.app",
+      "https://vn-party-thesis-9lo5.onrender.com"
     ]
 end
 
